@@ -1,2 +1,1 @@
-# Catlog
-UI client for adb logcat
+# TGFPA (Texture Generator For Programmer Art)

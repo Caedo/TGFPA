@@ -25,9 +25,6 @@ if "%1" == "trace" (
 if not exist build mkdir build
 pushd build
 
-REM Build With trace enabled
-REM start /b /wait "" "cl.exe" -DMTR_ENABLED %compile_flags% %main_file% /link %linker_flags% /libpath:%linker_path% /out:%exe_name%.exe
-
 start /b /wait "" "cl.exe" %compile_flags%  %main_file% /link %linker_flags% /libpath:%linker_path% /out:%exe_name%.exe
 
 copy ..\lib\* . >NUL
