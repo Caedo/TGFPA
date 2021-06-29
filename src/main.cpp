@@ -45,10 +45,37 @@ void main() { \n \
     FragColor = vec4(position.x, position.y, position.z, 1); \n \
 }";
 
+const char shaderHeader[] = " \
+#version 330 core \n \
+out vec4 FragColor; \n \
+in vec3 position; \n \
+";
+
 static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
+
+bool LoadFileContent(const char* filePath, char* buffer) {
+    FILE* file = fopen(filePath, "rb");
+    if(file) {
+        fseek(file, 0, SEEK_END);
+        long length = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        
+        // @MALLOC
+        // ret = (char*) malloc((length + 1) * sizeof(char));
+        fread(buffer, 1, length, file);
+        buffer[length] = '\0';
+        
+        fclose(file);
+
+        return true;
+    }
+    
+    return false;
+}
+
 
 void DrawMenuBar() {
     if(ImGui::BeginMainMenuBar()) {
@@ -155,8 +182,23 @@ int main()
         printf("Failed to compile vertex shader: %s \n", infoLog);
     }
 
+    char fragmentShaderSource[512] = {};
+    strcpy(fragmentShaderSource, shaderHeader);
+
+    char* bufferStart = fragmentShaderSource + IM_ARRAYSIZE(shaderHeader) - 1;
+
+    bool result = LoadFileContent("./shaders/test.glsl", bufferStart);
+    
+    if(result == false) {
+        fprintf(stderr, "Failed to load shader");
+        return 0;
+    }
+
+    printf("%s\n", fragmentShaderSource);
+
+    const char* s = fragmentShaderSource;
     unsigned int fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragShader, 1, &fragmentShader, NULL);
+    glShaderSource(fragShader, 1, &s, NULL);
     glCompileShader(fragShader);
 
 

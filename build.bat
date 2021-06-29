@@ -28,5 +28,6 @@ pushd build
 start /b /wait "" "cl.exe" %compile_flags%  %main_file% /link %linker_flags% /libpath:%linker_path% /out:%exe_name%.exe
 
 copy ..\lib\* . >NUL
-copy ..\resources\* . >NUL
+rem copy ..\resources\* . >NUL
+xcopy /E /I /Y ..\resources\* .
 popd

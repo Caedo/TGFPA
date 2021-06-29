@@ -1,5 +1,5 @@
 @echo off
 
 pushd build
-Catlog.exe
+TGFPA.exe
 popd
