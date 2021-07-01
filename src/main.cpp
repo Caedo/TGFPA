@@ -23,6 +23,15 @@
 
 #include "CLArray.h"
 
+struct Shader {
+    char* source;
+    char* filePath;
+
+    bool isValid;
+
+    GLuint shaderID;
+};
+
 bool show_demo_window;
 
 const char* vertexShader = " \
@@ -51,29 +60,85 @@ out vec4 FragColor; \n \
 in vec3 position; \n \
 ";
 
+GLuint vertexShaderID;
+
 static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-bool LoadFileContent(const char* filePath, char* buffer) {
-    FILE* file = fopen(filePath, "rb");
-    if(file) {
-        fseek(file, 0, SEEK_END);
-        long length = ftell(file);
-        fseek(file, 0, SEEK_SET);
-        
-        // @MALLOC
-        // ret = (char*) malloc((length + 1) * sizeof(char));
-        fread(buffer, 1, length, file);
-        buffer[length] = '\0';
-        
-        fclose(file);
+bool CompileShader(const char* fragmentSource, GLuint* shader) {
+    int success;
+    char infoLog[1024];
 
-        return true;
+    GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragShader, 1, &fragmentSource, NULL);
+    glCompileShader(fragShader);
+
+    glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
+    if(!success) {
+        glGetShaderInfoLog(fragShader, sizeof(infoLog), NULL, infoLog);
+        fprintf(stderr, "Failed to compile fragment shader: %s \n", infoLog);
+        fprintf(stderr, "\n %s \n\n", fragmentShader);
+
+        return false;
     }
+
+    GLuint linkedShader = glCreateProgram();
+    glAttachShader(linkedShader, vertexShaderID);
+    glAttachShader(linkedShader, fragShader);
+    glLinkProgram(linkedShader);
+
+    glGetShaderiv(linkedShader, GL_LINK_STATUS, &success);
+    if(!success) {
+        glGetShaderInfoLog(linkedShader, sizeof(infoLog), NULL, infoLog);
+        fprintf(stderr, "Failed to link shaders: %s \n", infoLog);
+
+        return false;
+    }
+
+    *shader = linkedShader;
+    return true;
+}
+
+Shader LoadShader(char* filePath) {
+    Shader ret = {};
+
+    ret.filePath = filePath;
+    FILE* file = fopen(filePath, "rb");
+
+    if(!file) {
+        fprintf(stderr, "Can't open file");
+        return ret;
+    }
+
+    fseek(file, 0, SEEK_END);
+    long fileLength = ftell(file);
+    fseek(file, 0, SEEK_SET);
     
-    return false;
+    int headerLength = IM_ARRAYSIZE(shaderHeader) - 1;
+    ret.source = (char*) malloc((headerLength + fileLength) + 1);
+
+    strcpy(ret.source, shaderHeader);
+    fread(ret.source + headerLength, 1, fileLength, file);
+
+    ret.source[headerLength + fileLength] = '\0';
+
+    if(CompileShader(ret.source, &ret.shaderID) == false) {
+        return ret;
+    }
+
+    fclose(file);
+
+    ret.isValid = true;
+    return ret;
+}
+
+void UnloadShader(Shader* shader) {
+    glDeleteShader(shader->shaderID);
+    free(shader->source);
+
+    shader->isValid = false;
 }
 
 
@@ -105,7 +170,7 @@ int main()
     //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
     
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Catlog", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "TGFPA", NULL, NULL);
     if (window == NULL)
         return 1;
 
@@ -169,61 +234,19 @@ int main()
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    unsigned int vertShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertShader, 1, &vertexShader, NULL);
-    glCompileShader(vertShader);
+    vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShaderID, 1, &vertexShader, NULL);
+    glCompileShader(vertexShaderID);
 
     int success;
     char infoLog[512];
 
-    glGetShaderiv(vertShader, GL_COMPILE_STATUS, &success);
+    glGetShaderiv(vertexShaderID, GL_COMPILE_STATUS, &success);
     if(!success) {
-        glGetShaderInfoLog(vertShader, sizeof(infoLog), NULL, infoLog);
+        glGetShaderInfoLog(vertexShaderID, sizeof(infoLog), NULL, infoLog);
         printf("Failed to compile vertex shader: %s \n", infoLog);
     }
 
-    char fragmentShaderSource[512] = {};
-    strcpy(fragmentShaderSource, shaderHeader);
-
-    char* bufferStart = fragmentShaderSource + IM_ARRAYSIZE(shaderHeader) - 1;
-
-    bool result = LoadFileContent("./shaders/test.glsl", bufferStart);
-    
-    if(result == false) {
-        fprintf(stderr, "Failed to load shader");
-        return 0;
-    }
-
-    printf("%s\n", fragmentShaderSource);
-
-    const char* s = fragmentShaderSource;
-    unsigned int fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragShader, 1, &s, NULL);
-    glCompileShader(fragShader);
-
-
-    glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
-    if(!success) {
-        glGetShaderInfoLog(fragShader, sizeof(infoLog), NULL, infoLog);
-        printf("Failed to compile fragment shader: %s \n", infoLog);
-        printf("\n %s \n\n", fragmentShader);
-    }
-
-    unsigned int shader = glCreateProgram();
-    glAttachShader(shader, vertShader);
-    glAttachShader(shader, fragShader);
-    glLinkProgram(shader);
-
-    glGetShaderiv(shader, GL_LINK_STATUS, &success);
-    if(!success) {
-        glGetShaderInfoLog(shader, sizeof(infoLog), NULL, infoLog);
-        printf("Failed to link shaders: %s \n", infoLog);
-    }
-
-    glDeleteShader(vertShader);
-    glDeleteShader(fragShader);
-
-    glUseProgram(shader);
 
     // Frame buffer
     unsigned int framebuffer;
@@ -246,9 +269,14 @@ int main()
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+    Shader shader = LoadShader("./shaders/test.glsl");
+
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
+        UnloadShader(&shader);
+        shader = LoadShader("./shaders/test.glsl");
+
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
         // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
@@ -287,7 +315,10 @@ int main()
         int display_w, display_h;
 
         // Draw to framebuffer
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        if (shader.isValid) {
+            glUseProgram(shader.shaderID);
+
+            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
             glViewport(0, 0, 512, 512);
             glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
@@ -295,9 +326,9 @@ int main()
 
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-        
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
 
         // draw application
         glfwGetFramebufferSize(window, &display_w, &display_h);
