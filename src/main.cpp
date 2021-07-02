@@ -29,7 +29,15 @@ struct Shader {
 
     bool isValid;
 
-    GLuint shaderID;
+    GLuint handle;
+};
+
+struct Framebuffer {
+    GLuint handle;
+    GLuint colorTexture;
+
+    int width;
+    int height;
 };
 
 bool show_demo_window;
@@ -45,13 +53,12 @@ void main() { \n\
     gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0); \n\
 }";
 
-const char* fragmentShader = " \
+const char* errorFragmentShaderSource = " \
 #version 330 core \n \
 out vec4 FragColor; \n \
-in vec3 position; \n \
 \
 void main() { \n \
-    FragColor = vec4(position.x, position.y, position.z, 1); \n \
+    FragColor = vec4(1, 0, 1, 1); \n \
 }";
 
 const char shaderHeader[] = " \
@@ -60,7 +67,8 @@ out vec4 FragColor; \n \
 in vec3 position; \n \
 ";
 
-GLuint vertexShaderID;
+GLuint vertexShaderHandle;
+GLuint errorShaderHandle;
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -79,13 +87,13 @@ bool CompileShader(const char* fragmentSource, GLuint* shader) {
     if(!success) {
         glGetShaderInfoLog(fragShader, sizeof(infoLog), NULL, infoLog);
         fprintf(stderr, "Failed to compile fragment shader: %s \n", infoLog);
-        fprintf(stderr, "\n %s \n\n", fragmentShader);
+        fprintf(stderr, "\n %s \n\n", fragmentSource);
 
         return false;
     }
 
     GLuint linkedShader = glCreateProgram();
-    glAttachShader(linkedShader, vertexShaderID);
+    glAttachShader(linkedShader, vertexShaderHandle);
     glAttachShader(linkedShader, fragShader);
     glLinkProgram(linkedShader);
 
@@ -124,7 +132,7 @@ Shader LoadShader(char* filePath) {
 
     ret.source[headerLength + fileLength] = '\0';
 
-    if(CompileShader(ret.source, &ret.shaderID) == false) {
+    if(CompileShader(ret.source, &ret.handle) == false) {
         return ret;
     }
 
@@ -135,10 +143,37 @@ Shader LoadShader(char* filePath) {
 }
 
 void UnloadShader(Shader* shader) {
-    glDeleteShader(shader->shaderID);
+    glDeleteShader(shader->handle);
     free(shader->source);
 
     shader->isValid = false;
+}
+
+Framebuffer CreateFramebuffer(int width, int height) {
+    Framebuffer ret = {};
+
+    ret.width = width;
+    ret.height = height;
+
+    glGenFramebuffers(1, &ret.handle);
+    glBindFramebuffer(GL_FRAMEBUFFER, ret.handle);
+
+    glGenTextures(1, &ret.colorTexture);
+    glBindTexture(GL_TEXTURE_2D, ret.colorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ret.colorTexture, 0);
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        fprintf(stderr, "Cannot create framebuffer");
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    return ret;
 }
 
 
@@ -215,6 +250,7 @@ int main()
         0, 2, 3
     };
 
+    // Quad mesh
     unsigned int VBO;
     glGenBuffers(1, &VBO);
 
@@ -234,42 +270,46 @@ int main()
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    vertexShaderID = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShaderID, 1, &vertexShader, NULL);
-    glCompileShader(vertexShaderID);
+    // built in shaders
+    vertexShaderHandle = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShaderHandle, 1, &vertexShader, NULL);
+    glCompileShader(vertexShaderHandle);
+
 
     int success;
     char infoLog[512];
 
-    glGetShaderiv(vertexShaderID, GL_COMPILE_STATUS, &success);
+    glGetShaderiv(vertexShaderHandle, GL_COMPILE_STATUS, &success);
     if(!success) {
-        glGetShaderInfoLog(vertexShaderID, sizeof(infoLog), NULL, infoLog);
-        printf("Failed to compile vertex shader: %s \n", infoLog);
+        glGetShaderInfoLog(vertexShaderHandle, sizeof(infoLog), NULL, infoLog);
+        fprintf(stderr, "Failed to compile BUILT-IN VERTEX shader: %s \n", infoLog);
     }
 
+    GLuint errorFragmenHandle = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(errorFragmenHandle, 1, &errorFragmentShaderSource, NULL);
+    glCompileShader(errorFragmenHandle);
 
-    // Frame buffer
-    unsigned int framebuffer;
-    glGenFramebuffers(1, &framebuffer);
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
-    unsigned int texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 512, 512, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
-    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        printf("Cannot create framebuffer");
-        exit(0);
+    glGetShaderiv(errorFragmenHandle, GL_COMPILE_STATUS, &success);
+    if(!success) {
+        glGetShaderInfoLog(errorFragmenHandle, sizeof(infoLog), NULL, infoLog);
+        fprintf(stderr, "Failed to compile ERROR FRAGMENT shader: %s \n", infoLog);
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    errorShaderHandle = glCreateProgram();
+    glAttachShader(errorShaderHandle, vertexShaderHandle);
+    glAttachShader(errorShaderHandle, errorFragmenHandle);
+    glLinkProgram(errorShaderHandle);
+
+    glGetShaderiv(errorShaderHandle, GL_LINK_STATUS, &success);
+    if(!success) {
+        glGetShaderInfoLog(errorShaderHandle, sizeof(infoLog), NULL, infoLog);
+        fprintf(stderr, "Failed to LINK ERROR shader: %s \n", infoLog);
+    }
+
+    glDeleteShader(errorFragmenHandle);
 
     Shader shader = LoadShader("./shaders/test.glsl");
+    Framebuffer framebuffer = CreateFramebuffer(512, 512);
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -295,9 +335,9 @@ int main()
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
-        ImGui::Image((void*)(intptr_t)texture, ImVec2(512, 512));
+        ImGui::Image((void*)(intptr_t)framebuffer.colorTexture, ImVec2(512, 512));
         if(ImGui::Button("Save")) {
-            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
 
             char buffer[512 * 512 * 3];
             
@@ -315,20 +355,20 @@ int main()
         int display_w, display_h;
 
         // Draw to framebuffer
-        if (shader.isValid) {
-            glUseProgram(shader.shaderID);
 
-            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glUseProgram(shader.isValid ? 
+                     shader.handle :
+                     errorShaderHandle);
 
-            glViewport(0, 0, 512, 512);
-            glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-            glClear(GL_COLOR_BUFFER_BIT);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
 
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glViewport(0, 0, framebuffer.width, framebuffer.height);
+        glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+        glClear(GL_COLOR_BUFFER_BIT);
 
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // draw application
         glfwGetFramebufferSize(window, &display_w, &display_h);
