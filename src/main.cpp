@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <ctype.h>
 
 #include "glad.c"
 
@@ -23,6 +24,8 @@
 
 #include "CLArray.h"
 
+#include "platform_win32.cpp"
+
 struct Shader {
     char* source;
     char* filePath;
@@ -30,6 +33,9 @@ struct Shader {
     bool isValid;
 
     GLuint handle;
+
+    //TODO: change to some multiplatform value...?
+    FILETIME lastWriteTime;
 };
 
 struct Framebuffer {
@@ -119,6 +125,8 @@ Shader LoadShader(char* filePath) {
         fprintf(stderr, "Can't open file");
         return ret;
     }
+
+    ret.lastWriteTime = GetLastWriteTime(filePath);
 
     fseek(file, 0, SEEK_END);
     long fileLength = ftell(file);
@@ -314,8 +322,14 @@ int main()
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
-        UnloadShader(&shader);
-        shader = LoadShader("./shaders/test.glsl");
+        // TODO: Win32 Call
+        FILETIME currentModifyTime = GetLastWriteTime(shader.filePath);
+        if(CompareFileTime(&currentModifyTime, &shader.lastWriteTime) != 0) {
+            UnloadShader(&shader);
+            shader = LoadShader("./shaders/test.glsl");
+
+            printf("RELOADING SHADER on path: %s \n", shader.filePath);
+        }
 
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
