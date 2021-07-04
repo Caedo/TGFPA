@@ -12,3 +12,37 @@ FILETIME GetLastWriteTime(char* filename) {
 
     return ret;
 }
+
+char* OpenFileDialog(MemoryArena* arena) {
+    assert(arena);
+    assert(arena->baseAddres);
+    
+    OPENFILENAME ofn = {};       // common dialog box structure
+    
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL; // TODO: Add GLFW window handle
+    ofn.lpstrFile = (LPSTR) PushArena(arena, MAX_PATH);
+    
+    // Make sure, that path is an empty string
+    ofn.lpstrFile[0] = '\0';
+    
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrFilter = "All\0*.*\0";
+    ofn.nFilterIndex = 1;
+    
+    // if(fileName != nullptr) {
+    //     ofn.lpstrFileTitle = (LPSTR) fileName->str;
+    //     ofn.nMaxFileTitle = (DWORD) fileName->capacity;
+    // }
+    
+    ofn.lpstrInitialDir = NULL;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+    
+    // Display the Open dialog box. 
+    BOOL result = GetOpenFileName(&ofn);
+    if(result) {
+        return ofn.lpstrFile;
+    }
+    
+    return NULL;
+}

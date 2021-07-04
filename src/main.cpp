@@ -22,11 +22,21 @@
 #include "stb/stb_image_write.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
 
-#include "CLArray.h"
+#define Bytes(n) n
+#define Kilobytes(n) (1024 * (uint64_t)(n))
+#define Megabytes(n) (1024 * (uint64_t)Kilobytes(n))
+#define Gigabytes(n) (1024 * (uint64_t)Megabytes(n))
+
+#include "memory_management.h"
 
 #include "platform_win32.cpp"
+#include "memory_management.cpp"
+
+MemoryArena temporaryArena;
 
 struct Shader {
+    MemoryArena shaderMemory;
+
     char* source;
     char* filePath;
 
@@ -34,7 +44,7 @@ struct Shader {
 
     GLuint handle;
 
-    //TODO: change to some multiplatform value...?
+    // @Win32
     FILETIME lastWriteTime;
 };
 
@@ -92,8 +102,8 @@ bool CompileShader(const char* fragmentSource, GLuint* shader) {
     glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
     if(!success) {
         glGetShaderInfoLog(fragShader, sizeof(infoLog), NULL, infoLog);
-        fprintf(stderr, "Failed to compile fragment shader: %s \n", infoLog);
-        fprintf(stderr, "\n %s \n\n", fragmentSource);
+        // fprintf(stderr, "Failed to compile fragment shader: %s \n", infoLog);
+        // fprintf(stderr, "\n %s \n\n", fragmentSource);
 
         return false;
     }
@@ -106,7 +116,7 @@ bool CompileShader(const char* fragmentSource, GLuint* shader) {
     glGetShaderiv(linkedShader, GL_LINK_STATUS, &success);
     if(!success) {
         glGetShaderInfoLog(linkedShader, sizeof(infoLog), NULL, infoLog);
-        fprintf(stderr, "Failed to link shaders: %s \n", infoLog);
+        // fprintf(stderr, "Failed to link shaders: %s \n", infoLog);
 
         return false;
     }
@@ -117,8 +127,11 @@ bool CompileShader(const char* fragmentSource, GLuint* shader) {
 
 Shader LoadShader(char* filePath) {
     Shader ret = {};
+    ret.shaderMemory = CreateArena();
 
-    ret.filePath = filePath;
+    ret.filePath = (char*) PushArena(&ret.shaderMemory, strlen(filePath) + 1);
+    memcpy(ret.filePath, filePath, strlen(filePath) + 1);
+
     FILE* file = fopen(filePath, "rb");
 
     if(!file) {
@@ -133,7 +146,9 @@ Shader LoadShader(char* filePath) {
     fseek(file, 0, SEEK_SET);
     
     int headerLength = IM_ARRAYSIZE(shaderHeader) - 1;
-    ret.source = (char*) malloc((headerLength + fileLength) + 1);
+    int sourceLength = (headerLength + fileLength) + 1;
+
+    ret.source = (char*) PushArena(&ret.shaderMemory, sourceLength);
 
     strcpy(ret.source, shaderHeader);
     fread(ret.source + headerLength, 1, fileLength, file);
@@ -152,7 +167,8 @@ Shader LoadShader(char* filePath) {
 
 void UnloadShader(Shader* shader) {
     glDeleteShader(shader->handle);
-    free(shader->source);
+
+    DestroyArena(&shader->shaderMemory);
 
     shader->isValid = false;
 }
@@ -225,7 +241,9 @@ int main()
         fprintf(stderr, "Failed to initialize OpenGL loader!\n");
         return 1;
     }
-    
+
+    temporaryArena = CreateArena();
+
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -244,7 +262,6 @@ int main()
 
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
 
     float vertices[] = {
         -1.0f, -1.0f, 0.0f, // bot left
@@ -282,7 +299,6 @@ int main()
     vertexShaderHandle = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShaderHandle, 1, &vertexShader, NULL);
     glCompileShader(vertexShaderHandle);
-
 
     int success;
     char infoLog[512];
@@ -322,7 +338,7 @@ int main()
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
-        // TODO: Win32 Call
+        // @Win32 Call
         FILETIME currentModifyTime = GetLastWriteTime(shader.filePath);
         if(CompareFileTime(&currentModifyTime, &shader.lastWriteTime) != 0) {
             UnloadShader(&shader);
@@ -353,13 +369,19 @@ int main()
         if(ImGui::Button("Save")) {
             glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
 
-            char buffer[512 * 512 * 3];
+            void* textureBuffer = PushArena(&temporaryArena, framebuffer.width * framebuffer.height);
             
             glReadBuffer(GL_COLOR_ATTACHMENT0);
-            glReadPixels(0, 0, 512, 512, GL_RGB, GL_UNSIGNED_BYTE, (void*) buffer);
-            stbi_write_png("test.png", 512, 512, 3, buffer, 512 * 3);
+            glReadPixels(0, 0, framebuffer.width, framebuffer.height, GL_RGB, GL_UNSIGNED_BYTE, textureBuffer);
+            stbi_write_png("test.png", framebuffer.width, framebuffer.height, 3 /*RGB*/, textureBuffer, framebuffer.width * 3);
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+
+        ImGui::SameLine();
+        if(ImGui::Button("Open")) {
+            char* path = OpenFileDialog(&temporaryArena);
+            printf(path);
         }
 
         // Rendering
@@ -394,6 +416,8 @@ int main()
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         
         glfwSwapBuffers(window);
+
+        ClearArena(&temporaryArena);
     }
     
     // Cleanup
