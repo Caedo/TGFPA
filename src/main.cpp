@@ -34,11 +34,16 @@
 
 MemoryArena temporaryArena;
 
+struct Str8 {
+    char* string;
+    uint64_t length;
+};
+
 struct Shader {
     MemoryArena shaderMemory;
 
-    char* source;
-    char* filePath;
+    Str8 source;
+    Str8 filePath;
 
     bool isValid;
 
@@ -125,21 +130,14 @@ bool CompileShader(const char* fragmentSource, GLuint* shader) {
     return true;
 }
 
-Shader LoadShader(char* filePath) {
-    Shader ret = {};
-    ret.shaderMemory = CreateArena();
-
-    ret.filePath = (char*) PushArena(&ret.shaderMemory, strlen(filePath) + 1);
-    memcpy(ret.filePath, filePath, strlen(filePath) + 1);
-
-    FILE* file = fopen(filePath, "rb");
+Str8 LoadShaderSource(Str8 filePath, MemoryArena* arena) {
+    Str8 ret = {};
+    FILE* file = fopen(filePath.string, "rb");
 
     if(!file) {
         fprintf(stderr, "Can't open file");
         return ret;
     }
-
-    ret.lastWriteTime = GetLastWriteTime(filePath);
 
     fseek(file, 0, SEEK_END);
     long fileLength = ftell(file);
@@ -148,18 +146,34 @@ Shader LoadShader(char* filePath) {
     int headerLength = IM_ARRAYSIZE(shaderHeader) - 1;
     int sourceLength = (headerLength + fileLength) + 1;
 
-    ret.source = (char*) PushArena(&ret.shaderMemory, sourceLength);
+    ret.length = sourceLength;
+    ret.string = (char*) PushArena(arena, sourceLength);
 
-    strcpy(ret.source, shaderHeader);
-    fread(ret.source + headerLength, 1, fileLength, file);
+    strcpy(ret.string, shaderHeader);
+    fread(ret.string + headerLength, 1, fileLength, file);
+    fclose(file);
 
-    ret.source[headerLength + fileLength] = '\0';
+    ret.string[headerLength + fileLength] = '\0';
 
-    if(CompileShader(ret.source, &ret.handle) == false) {
+    return ret;
+}
+
+Shader CreateShaderFromFile(char* filePath) {
+    Shader ret = {};
+    ret.shaderMemory = CreateArena();
+
+    ret.filePath.length = strlen(filePath) + 1;
+    ret.filePath.string = (char*) PushArena(&ret.shaderMemory, ret.filePath.length);
+
+    ret.lastWriteTime = GetLastWriteTime(filePath);
+
+    memcpy(ret.filePath.string, filePath, ret.filePath.length);
+
+    ret.source = LoadShaderSource(ret.filePath, &ret.shaderMemory);
+
+    if(CompileShader(ret.source.string, &ret.handle) == false) {
         return ret;
     }
-
-    fclose(file);
 
     ret.isValid = true;
     return ret;
@@ -168,9 +182,16 @@ Shader LoadShader(char* filePath) {
 void UnloadShader(Shader* shader) {
     glDeleteShader(shader->handle);
 
-    DestroyArena(&shader->shaderMemory);
+    ClearArena(&shader->shaderMemory);
 
     shader->isValid = false;
+}
+
+void ReloadShader(Shader* shader) {
+    shader->source = LoadShaderSource(shader->filePath, &shader->shaderMemory);
+    shader->lastWriteTime = GetLastWriteTime(shader->filePath.string);
+
+    shader->isValid = CompileShader(shader->source.string, &shader->handle);
 }
 
 Framebuffer CreateFramebuffer(int width, int height) {
@@ -332,19 +353,21 @@ int main()
 
     glDeleteShader(errorFragmenHandle);
 
-    Shader shader = LoadShader("./shaders/test.glsl");
+    Shader shader = CreateShaderFromFile("./shaders/test.glsl");
     Framebuffer framebuffer = CreateFramebuffer(512, 512);
 
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
         // @Win32 Call
-        FILETIME currentModifyTime = GetLastWriteTime(shader.filePath);
+        FILETIME currentModifyTime = GetLastWriteTime(shader.filePath.string);
         if(CompareFileTime(&currentModifyTime, &shader.lastWriteTime) != 0) {
-            UnloadShader(&shader);
-            shader = LoadShader("./shaders/test.glsl");
+            // NOTE: this won't work, if shader memory have any other data
+            // than filaPath + source
+            PopArena(&shader.shaderMemory, shader.source.length);
 
-            printf("RELOADING SHADER on path: %s \n", shader.filePath);
+            ReloadShader(&shader);
+            printf("RELOADING SHADER on path: %s \n", shader.filePath.string);
         }
 
         // Poll and handle events (inputs, window resize, etc.)
@@ -381,7 +404,17 @@ int main()
         ImGui::SameLine();
         if(ImGui::Button("Open")) {
             char* path = OpenFileDialog(&temporaryArena);
-            printf(path);
+            if(path) {
+                UnloadShader(&shader);
+
+                int len = (int) strlen(path) + 1;
+                shader.filePath.string = (char*) PushArena(&shader.shaderMemory, len);
+                shader.filePath.length = len;
+
+                memcpy(shader.filePath.string, path, len);
+
+                ReloadShader(&shader);
+            }
         }
 
         // Rendering

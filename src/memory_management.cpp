@@ -27,6 +27,12 @@ void* PushArena(MemoryArena* arena, uint64_t size) {
     return pointer;
 }
 
+void PopArena(MemoryArena* arena, uint64_t size) {
+    assert(arena->allocatedOffset - size >= 0);
+
+    arena->allocatedOffset -= size;
+}
+
 void ClearArena(MemoryArena* arena) {
     arena->allocatedOffset = 0;
 }
