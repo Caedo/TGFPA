@@ -88,6 +88,21 @@ out vec4 FragColor; \n \
 in vec3 position; \n \
 ";
 
+ImVec2 TextureSizePresets[] = {
+    ImVec2(256, 256),
+    ImVec2(512, 512),
+    ImVec2(1024, 1024),
+};
+
+char* TextureSizeLabels[] = {
+    "256 x 256",
+    "512 x 512",
+    "1024 x 1024",
+    "Custom...",
+};
+
+int selectedPresetIndex;
+
 GLuint vertexShaderHandle;
 GLuint errorShaderHandle;
 
@@ -219,6 +234,19 @@ Framebuffer CreateFramebuffer(int width, int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     return ret;
+}
+
+void ResizeFrambuffer(Framebuffer* frambuffer, int width, int height) {
+    assert(width > 1 && height > 1);
+
+    if(frambuffer->width != width || frambuffer->height != height) {
+        glBindTexture(GL_TEXTURE_2D, frambuffer->colorTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        frambuffer->width = width;
+        frambuffer->height = height;
+    }
 }
 
 
@@ -388,7 +416,44 @@ int main()
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
-        ImGui::Image((void*)(intptr_t)framebuffer.colorTexture, ImVec2(512, 512));
+        int presetsCount = IM_ARRAYSIZE(TextureSizePresets);
+        if(ImGui::BeginCombo("Size", TextureSizeLabels[selectedPresetIndex])) {
+
+            // NOTE: Labels should have (presetsCount + 1) elements
+            for(int i = 0; i <= presetsCount; i++) {
+                if(ImGui::Selectable(TextureSizeLabels[i], selectedPresetIndex == i)) {
+                    selectedPresetIndex = i;
+
+                    if(i < presetsCount) {
+                        ResizeFrambuffer(&framebuffer, (int) TextureSizePresets[i].x, (int) TextureSizePresets[i].y);
+                    }
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        // NOTE: TODO: Move to other struct when (if?) multiple shaders are added
+        static int width = 512;
+        static int height = 512;
+        if(selectedPresetIndex == presetsCount) {
+            ImGui::PushItemWidth(ImGui::GetFontSize() * 12);
+
+            ImGui::InputInt("Width", &width);
+            ImGui::SameLine();
+            ImGui::InputInt("Height", &height);
+            ImGui::PopItemWidth();
+
+            if(width <= 0) width = 1;
+            if(height <= 0) height = 1;
+
+            ImGui::SameLine();
+            if(ImGui::Button("Apply")) {
+                ResizeFrambuffer(&framebuffer, width, height);
+            }
+        }
+
+        ImGui::Image((void*)(intptr_t)framebuffer.colorTexture, ImVec2((float) framebuffer.width, (float) framebuffer.height));
         if(ImGui::Button("Save")) {
             glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
 
