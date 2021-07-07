@@ -48,6 +48,7 @@ struct Shader {
     bool isValid;
 
     GLuint handle;
+    GLint resolutionLocation;
 
     // @Win32
     FILETIME lastWriteTime;
@@ -63,16 +64,21 @@ struct Framebuffer {
 
 bool show_demo_window;
 
-const char* vertexShader = " \
-#version 330 core \n\
-layout (location = 0) in vec3 aPos; \n\
-\
-out vec3 position; \n \
-\
-void main() { \n\
-    position = aPos; \n \
-    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0); \n\
-}";
+const char* vertexShader =
+"#version 330 core \n"
+"layout (location = 0) in vec3 aPos; \n"
+"layout (location = 1) in vec2 aTexCoord; \n"
+
+"out vec3 position; \n"
+"out vec2 fragCoord; \n"
+
+"uniform ivec2 resolution;"
+
+"void main() { \n"
+"    position = aPos; \n"
+"    fragCoord = aTexCoord * resolution;\n"
+"    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0); \n"
+"}";
 
 const char* errorFragmentShaderSource = " \
 #version 330 core \n \
@@ -82,19 +88,26 @@ void main() { \n \
     FragColor = vec4(1, 0, 1, 1); \n \
 }";
 
-const char shaderHeader[] = " \
-#version 330 core \n \
-out vec4 FragColor; \n \
-in vec3 position; \n \
-";
+const char shaderHeader[] =
+"#version 330 core\n"
+
+"out vec4 FragColor;\n"
+
+"in vec3 position;\n"
+"in vec2 fragCoord;\n"
+
+"uniform ivec2 resolution;\n"
+;
 
 ImVec2 TextureSizePresets[] = {
+    ImVec2(500, 256),
     ImVec2(256, 256),
     ImVec2(512, 512),
     ImVec2(1024, 1024),
 };
 
 char* TextureSizeLabels[] = {
+    "500 x 256",
     "256 x 256",
     "512 x 512",
     "1024 x 1024",
@@ -122,8 +135,8 @@ bool CompileShader(const char* fragmentSource, GLuint* shader) {
     glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
     if(!success) {
         glGetShaderInfoLog(fragShader, sizeof(infoLog), NULL, infoLog);
-        // fprintf(stderr, "Failed to compile fragment shader: %s \n", infoLog);
-        // fprintf(stderr, "\n %s \n\n", fragmentSource);
+        fprintf(stderr, "Failed to compile fragment shader: %s \n", infoLog);
+        fprintf(stderr, "\n %s \n\n", fragmentSource);
 
         return false;
     }
@@ -136,7 +149,7 @@ bool CompileShader(const char* fragmentSource, GLuint* shader) {
     glGetShaderiv(linkedShader, GL_LINK_STATUS, &success);
     if(!success) {
         glGetShaderInfoLog(linkedShader, sizeof(infoLog), NULL, infoLog);
-        // fprintf(stderr, "Failed to link shaders: %s \n", infoLog);
+        fprintf(stderr, "Failed to link shaders: %s \n", infoLog);
 
         return false;
     }
@@ -189,6 +202,8 @@ Shader CreateShaderFromFile(char* filePath) {
     if(CompileShader(ret.source.string, &ret.handle) == false) {
         return ret;
     }
+
+    ret.resolutionLocation = glGetUniformLocation(ret.handle, "resolution");
 
     ret.isValid = true;
     return ret;
@@ -312,11 +327,11 @@ int main()
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-    float vertices[] = {
-        -1.0f, -1.0f, 0.0f, // bot left
-         1.0f, -1.0f, 0.0f, // bot right
-         1.0f,  1.0f, 0.0f, // top right
-        -1.0f,  1.0f, 0.0f // top left
+    float vertices[] = { // Pos, UV
+        -1.0f, -1.0f, 0.0f,  0.0f, 0.0f, // bot left
+         1.0f, -1.0f, 0.0f,  1.0f, 0.0f, // bot right
+         1.0f,  1.0f, 0.0f,  1.0f, 1.0f, // top right
+        -1.0f,  1.0f, 0.0f,  0.0f, 1.0f, // top left
     };
 
     int indices[] = { 
@@ -341,8 +356,11 @@ int main()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
 
     // built in shaders
     vertexShaderHandle = glCreateShader(GL_VERTEX_SHADER);
@@ -382,7 +400,7 @@ int main()
     glDeleteShader(errorFragmenHandle);
 
     Shader shader = CreateShaderFromFile("./shaders/test.glsl");
-    Framebuffer framebuffer = CreateFramebuffer(512, 512);
+    Framebuffer framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -495,6 +513,8 @@ int main()
                      errorShaderHandle);
 
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
+
+        glUniform2i(shader.resolutionLocation, (int) framebuffer.width, (int) framebuffer.height);
 
         glViewport(0, 0, framebuffer.width, framebuffer.height);
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
