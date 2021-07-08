@@ -49,6 +49,9 @@ struct Shader {
 
     GLuint handle;
     GLint resolutionLocation;
+    GLint timeLocation;
+    GLint timeDeltaLocation;
+    GLint frameLocation;
 
     // @Win32
     FILETIME lastWriteTime;
@@ -70,13 +73,13 @@ const char* vertexShader =
 "layout (location = 1) in vec2 aTexCoord; \n"
 
 "out vec3 position; \n"
-"out vec2 fragCoord; \n"
+"out vec2 texCoord; \n"
 
-"uniform ivec2 resolution;"
+"uniform ivec2 iResolution;"
 
 "void main() { \n"
 "    position = aPos; \n"
-"    fragCoord = aTexCoord * resolution;\n"
+"    texCoord = aTexCoord * iResolution;\n"
 "    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0); \n"
 "}";
 
@@ -94,9 +97,17 @@ const char shaderHeader[] =
 "out vec4 FragColor;\n"
 
 "in vec3 position;\n"
-"in vec2 fragCoord;\n"
+"in vec2 texCoord;\n"
 
-"uniform ivec2 resolution;\n"
+"uniform ivec2 iResolution;\n"
+"uniform float iTime;\n"
+"uniform float iTimeDelta;\n"
+"uniform int   iFrame;\n"
+
+"void mainImage(out vec4 fragColor, in vec2 fragCoord);\n"
+"void main() {\n"
+"   mainImage(FragColor, texCoord); \n"
+"}\n\n"
 ;
 
 ImVec2 TextureSizePresets[] = {
@@ -118,6 +129,11 @@ int selectedPresetIndex;
 
 GLuint vertexShaderHandle;
 GLuint errorShaderHandle;
+
+double time;
+double deltaTime;
+
+int frame;
 
 static void glfw_error_callback(int error, const char* description)
 {
@@ -203,7 +219,10 @@ Shader CreateShaderFromFile(char* filePath) {
         return ret;
     }
 
-    ret.resolutionLocation = glGetUniformLocation(ret.handle, "resolution");
+    ret.resolutionLocation = glGetUniformLocation(ret.handle, "iResolution");
+    ret.timeLocation = glGetUniformLocation(ret.handle, "iTime");
+    ret.timeDeltaLocation = glGetUniformLocation(ret.handle, "iTimeDelta");
+    ret.frameLocation = glGetUniformLocation(ret.handle, "iFrame");
 
     ret.isValid = true;
     return ret;
@@ -423,6 +442,10 @@ int main()
         // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
         glfwPollEvents();
 
+        deltaTime = glfwGetTime() - time;
+        time = glfwGetTime();
+        frame++;
+
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -515,6 +538,9 @@ int main()
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
 
         glUniform2i(shader.resolutionLocation, (int) framebuffer.width, (int) framebuffer.height);
+        glUniform1f(shader.timeLocation, (float) time);
+        glUniform1f(shader.timeDeltaLocation, (float) deltaTime);
+        glUniform1i(shader.frameLocation, frame);
 
         glViewport(0, 0, framebuffer.width, framebuffer.height);
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
