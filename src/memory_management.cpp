@@ -34,6 +34,7 @@ void PopArena(MemoryArena* arena, uint64_t size) {
 }
 
 void ClearArena(MemoryArena* arena) {
+    ZeroMemory(arena->baseAddres, arena->allocatedOffset);
     arena->allocatedOffset = 0;
 }
 

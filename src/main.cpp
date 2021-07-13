@@ -27,17 +27,19 @@
 #define Megabytes(n) (1024 * (uint64_t)Kilobytes(n))
 #define Gigabytes(n) (1024 * (uint64_t)Megabytes(n))
 
-#include "memory_management.h"
-
-#include "platform_win32.cpp"
-#include "memory_management.cpp"
-
-MemoryArena temporaryArena;
-
 struct Str8 {
     char* string;
     uint64_t length;
 };
+
+#include "memory_management.h"
+#include "parser.h"
+
+#include "platform_win32.cpp"
+#include "memory_management.cpp"
+#include "parser.cpp"
+
+MemoryArena temporaryArena;
 
 struct Shader {
     MemoryArena shaderMemory;
@@ -52,6 +54,9 @@ struct Shader {
     GLint timeLocation;
     GLint timeDeltaLocation;
     GLint frameLocation;
+
+    int uniformsCount;
+    ShaderUniformData* uniforms;
 
     // @Win32
     FILETIME lastWriteTime;
@@ -184,22 +189,48 @@ Str8 LoadShaderSource(Str8 filePath, MemoryArena* arena) {
     }
 
     fseek(file, 0, SEEK_END);
-    long fileLength = ftell(file);
+    long fileLength = ftell(file) + 1;
     fseek(file, 0, SEEK_SET);
-    
-    int headerLength = IM_ARRAYSIZE(shaderHeader) - 1;
-    int sourceLength = (headerLength + fileLength) + 1;
 
-    ret.length = sourceLength;
-    ret.string = (char*) PushArena(arena, sourceLength);
+    ret.length = fileLength;
+    ret.string = (char*) PushArena(arena, fileLength);
 
-    strcpy(ret.string, shaderHeader);
-    fread(ret.string + headerLength, 1, fileLength, file);
+    fread(ret.string, 1, fileLength, file);
     fclose(file);
 
-    ret.string[headerLength + fileLength] = '\0';
+    ret.string[fileLength] = '\0';
 
     return ret;
+}
+
+void CreateShader(Shader* shader) {
+    shader->lastWriteTime = GetLastWriteTime(shader->filePath.string);
+
+    shader->source   = LoadShaderSource(shader->filePath, &shader->shaderMemory);
+    shader->uniforms = GetShaderUniforms(shader->source.string, &shader->shaderMemory, &shader->uniformsCount);
+
+    int headerLength = IM_ARRAYSIZE(shaderHeader);
+    uint64_t actualSourceLength = shader->source.length + headerLength - 1;
+    char* actualSource = (char*) PushArena(&temporaryArena, actualSourceLength);
+
+    memcpy(actualSource, shaderHeader, headerLength - 1);
+    memcpy(actualSource + headerLength - 1, shader->source.string, shader->source.length);
+
+    if(CompileShader(actualSource, &shader->handle) == false) {
+        shader->isValid = false;
+        return;
+    }
+
+    shader->resolutionLocation = glGetUniformLocation(shader->handle, "iResolution");
+    shader->timeLocation = glGetUniformLocation(shader->handle, "iTime");
+    shader->timeDeltaLocation = glGetUniformLocation(shader->handle, "iTimeDelta");
+    shader->frameLocation = glGetUniformLocation(shader->handle, "iFrame");
+
+    for(int i = 0; i < shader->uniformsCount; i++) {
+        shader->uniforms[i].location = glGetUniformLocation(shader->handle, shader->uniforms[i].name);
+    }
+
+    shader->isValid = true;
 }
 
 Shader CreateShaderFromFile(char* filePath) {
@@ -213,18 +244,8 @@ Shader CreateShaderFromFile(char* filePath) {
 
     memcpy(ret.filePath.string, filePath, ret.filePath.length);
 
-    ret.source = LoadShaderSource(ret.filePath, &ret.shaderMemory);
+    CreateShader(&ret);
 
-    if(CompileShader(ret.source.string, &ret.handle) == false) {
-        return ret;
-    }
-
-    ret.resolutionLocation = glGetUniformLocation(ret.handle, "iResolution");
-    ret.timeLocation = glGetUniformLocation(ret.handle, "iTime");
-    ret.timeDeltaLocation = glGetUniformLocation(ret.handle, "iTimeDelta");
-    ret.frameLocation = glGetUniformLocation(ret.handle, "iFrame");
-
-    ret.isValid = true;
     return ret;
 }
 
@@ -237,10 +258,16 @@ void UnloadShader(Shader* shader) {
 }
 
 void ReloadShader(Shader* shader) {
-    shader->source = LoadShaderSource(shader->filePath, &shader->shaderMemory);
-    shader->lastWriteTime = GetLastWriteTime(shader->filePath.string);
+    uint64_t pathLen = shader->filePath.length;
+    char* temp = (char*) PushArena(&temporaryArena, pathLen);
+    memcpy(temp, shader->filePath.string, pathLen);
 
-    shader->isValid = CompileShader(shader->source.string, &shader->handle);
+    ClearArena(&shader->shaderMemory);
+    shader->filePath.string = (char*) PushArena(&shader->shaderMemory, pathLen);
+    memcpy(shader->filePath.string, temp, pathLen);
+
+    glDeleteShader(shader->handle);
+    CreateShader(shader);
 }
 
 Framebuffer CreateFramebuffer(int width, int height) {
@@ -427,10 +454,6 @@ int main()
         // @Win32 Call
         FILETIME currentModifyTime = GetLastWriteTime(shader.filePath.string);
         if(CompareFileTime(&currentModifyTime, &shader.lastWriteTime) != 0) {
-            // NOTE: this won't work, if shader memory have any other data
-            // than filaPath + source
-            PopArena(&shader.shaderMemory, shader.source.length);
-
             ReloadShader(&shader);
             printf("RELOADING SHADER on path: %s \n", shader.filePath.string);
         }
@@ -521,6 +544,23 @@ int main()
 
                 ReloadShader(&shader);
             }
+        }
+
+        for(int i = 0; i < shader.uniformsCount; i++) {
+            if(shader.uniforms[i].location == -1)
+                continue;
+
+            if(shader.uniforms[i].type == Int) {
+                if(ImGui::InputInt(shader.uniforms[i].name, &shader.uniforms[i].intValue)) {
+                    glUniform1i(shader.uniforms[i].location, shader.uniforms[i].intValue);
+                }
+            }
+            else if(shader.uniforms[i].type == Float) {
+                if(ImGui::InputFloat(shader.uniforms[i].name, &shader.uniforms[i].floatValue)) {
+                    glUniform1f(shader.uniforms[i].location, shader.uniforms[i].floatValue);
+                }
+            }
+
         }
 
         // Rendering
