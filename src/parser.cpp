@@ -46,12 +46,14 @@ Token PeekNextToken(Tokenizer* tokenizer) {
     at++;
     switch (firstChar)
     {
-        case '{':  token.type = Token_OpenBrace;  break;
-        case '}':  token.type = Token_CloseBrace; break;
-        case '=':  token.type = Token_Equal;      break;
-        case ',':  token.type = Token_Comma;      break;
-        case '#':  token.type = Token_Hash;       break;
-        case ';':  token.type = Token_Semicolon;  break;
+        case '{':  token.type = Token_OpenBrace;        break;
+        case '}':  token.type = Token_CloseBrace;       break;
+        case '[':  token.type = Token_OpenSquareBrace;  break;
+        case ']':  token.type = Token_CloseSquareBrace; break;
+        case '=':  token.type = Token_Equal;            break;
+        case ',':  token.type = Token_Comma;            break;
+        case '#':  token.type = Token_Hash;             break;
+        case ';':  token.type = Token_Semicolon;        break;
         
         case '\0': {
             token.type = Token_EndOfStream;
@@ -222,19 +224,30 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
 
             ShaderUniformData* uniform = (ShaderUniformData*) PushArena(arena, sizeof(ShaderUniformData));
 
-            if(IsTokenEqual(typeToken, "int")) {
-                uniform->type = Int;
-            }
-            else if(IsTokenEqual(typeToken, "float")) {
-                uniform->type = Float;
-            }
-            else {
-                // PopArena(arena, sizeof(ShaderUniformData));
-                // continue;
+            for(int i = 0; i < (int) UniformType_Count; i++) {
+                if(IsTokenEqual(typeToken, UniformTypeNames[i])) {
+                    uniform->type = (UniformType) i;
+                    fprintf(stderr, "%s\n", UniformTypeNames[i]);
+                    break;
+                }
             }
 
             StringCopy(uniform->name, nameToken.text, nameToken.length + 1);
             uniform->name[nameToken.length] = 0;
+
+            Token potentialArrayToken = PeekNextToken(&tokenizer);
+            if(potentialArrayToken.type == Token_OpenSquareBrace) {
+                GetNextToken(&tokenizer);
+                Token lengthToken = RequireToken(&tokenizer, Token_Number);
+                RequireToken(&tokenizer, Token_CloseSquareBrace);
+
+                if(tokenizer.parsing == false) {
+                    return NULL;
+                }
+
+                uniform->isArray = true;
+                uniform->arrayLength = atoi(lengthToken.text);
+            }
 
             uniform->location = -1;
 

@@ -267,6 +267,7 @@ void ReloadShader(Shader* shader) {
     memcpy(shader->filePath.string, temp, pathLen);
 
     glDeleteShader(shader->handle);
+    
     CreateShader(shader);
 }
 
@@ -550,17 +551,63 @@ int main()
             if(shader.uniforms[i].location == -1)
                 continue;
 
-            if(shader.uniforms[i].type == Int) {
-                if(ImGui::InputInt(shader.uniforms[i].name, &shader.uniforms[i].intValue)) {
-                    glUniform1i(shader.uniforms[i].location, shader.uniforms[i].intValue);
-                }
-            }
-            else if(shader.uniforms[i].type == Float) {
-                if(ImGui::InputFloat(shader.uniforms[i].name, &shader.uniforms[i].floatValue)) {
-                    glUniform1f(shader.uniforms[i].location, shader.uniforms[i].floatValue);
-                }
-            }
+            ShaderUniformData* uniform = shader.uniforms + i;
+            const char* label = uniform->name;
 
+            switch(shader.uniforms[i].type) {
+                case UniformType_Bool: {} break;
+                case UniformType_Int: {
+                    if(ImGui::InputInt(label, &uniform->intValue)) {
+                        glUniform1i(uniform->location, uniform->intValue);
+                    }
+                } 
+                break;
+
+                case UniformType_Uint: {
+                    // if(ImGui::InputInt(label, &uniform->floatValue)) {
+                    //     glUniform1f(uniform->location, uniform->floatValue);
+                    // }
+                } break;
+
+                case UniformType_Float: {} break;
+                case UniformType_Double: {} break;
+
+                case UniformType_BVec2: {} break;
+                case UniformType_BVec3: {} break;
+                case UniformType_BVec4: {} break;
+
+                case UniformType_IVec2: {} break;
+                case UniformType_IVec3: {} break;
+                case UniformType_IVec4: {} break;
+
+                case UniformType_UVec2: {} break;
+                case UniformType_UVec3: {} break;
+                case UniformType_UVec4: {} break;
+
+                case UniformType_Vec2: {} break;
+                case UniformType_Vec3: {} break;
+                case UniformType_Vec4: {} break;
+
+                case UniformType_DVec2: {} break;
+                case UniformType_DVec3: {} break;
+                case UniformType_DVec4: {} break;
+
+                case UniformType_Mat2: {} break;
+                case UniformType_Mat3: {} break;
+                case UniformType_Mat4: {} break;
+
+                case UniformType_Mat2x2: {} break;
+                case UniformType_Mat2x3: {} break;
+                case UniformType_Mat2x4: {} break;
+
+                case UniformType_Mat3x2: {} break;
+                case UniformType_Mat3x3: {} break;
+                case UniformType_Mat3x4: {} break;
+
+                case UniformType_Mat4x2: {} break;
+                case UniformType_Mat4x3: {} break;
+                case UniformType_Mat4x4: {} break;
+            }
         }
 
         // Rendering
