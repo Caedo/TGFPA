@@ -144,7 +144,10 @@ struct ShaderUniformData {
 
     union {
         float floatValue;
+        double doubleValue;
         int intValue;
+
+        float fVectorValue[4];
     };
 };
 

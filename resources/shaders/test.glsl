@@ -1,5 +1,5 @@
 
-uniform float multiplier;
+uniform vec2 multiplier;
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord )
 {
@@ -8,7 +8,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     vec3 color = 0.5 + 0.5 * cos(iTime + uv.xyy);
     color.z = 1;
 
-    color *= multiplier;
+    color.xy *= multiplier;
 
     fragColor = vec4(color, 1.0);
 }

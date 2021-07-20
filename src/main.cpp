@@ -145,19 +145,28 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-bool CompileShader(const char* fragmentSource, GLuint* shader) {
+bool CompileShader(Str8 fragmentSource, GLuint* shader) {
     int success;
-    char infoLog[1024];
+    char infoLog[1024] = {};
+
+    char* sources[2] = {};
+    int lengths[2] = {};
+
+    sources[0] = (char*) shaderHeader;
+    sources[1] = fragmentSource.string;
+
+    lengths[0] = IM_ARRAYSIZE(shaderHeader);
+    lengths[1] = (GLint) fragmentSource.length;
 
     GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragShader, 1, &fragmentSource, NULL);
+    glShaderSource(fragShader, 2, sources, lengths);
     glCompileShader(fragShader);
 
     glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
     if(!success) {
         glGetShaderInfoLog(fragShader, sizeof(infoLog), NULL, infoLog);
         fprintf(stderr, "Failed to compile fragment shader: %s \n", infoLog);
-        fprintf(stderr, "\n %s \n\n", fragmentSource);
+        fprintf(stderr, "\n %s \n\n", fragmentSource.string);
 
         return false;
     }
@@ -209,14 +218,7 @@ void CreateShader(Shader* shader) {
     shader->source   = LoadShaderSource(shader->filePath, &shader->shaderMemory);
     shader->uniforms = GetShaderUniforms(shader->source.string, &shader->shaderMemory, &shader->uniformsCount);
 
-    int headerLength = IM_ARRAYSIZE(shaderHeader);
-    uint64_t actualSourceLength = shader->source.length + headerLength - 1;
-    char* actualSource = (char*) PushArena(&temporaryArena, actualSourceLength);
-
-    memcpy(actualSource, shaderHeader, headerLength - 1);
-    memcpy(actualSource + headerLength - 1, shader->source.string, shader->source.length);
-
-    if(CompileShader(actualSource, &shader->handle) == false) {
+    if(CompileShader(shader->source, &shader->handle) == false) {
         shader->isValid = false;
         return;
     }
@@ -556,6 +558,7 @@ int main()
 
             switch(shader.uniforms[i].type) {
                 case UniformType_Bool: {} break;
+
                 case UniformType_Int: {
                     if(ImGui::InputInt(label, &uniform->intValue)) {
                         glUniform1i(uniform->location, uniform->intValue);
@@ -569,8 +572,17 @@ int main()
                     // }
                 } break;
 
-                case UniformType_Float: {} break;
-                case UniformType_Double: {} break;
+                case UniformType_Float: {
+                    if(ImGui::InputFloat(label, &uniform->floatValue)) {
+                        glUniform1f(uniform->location, uniform->floatValue);
+                    }
+                } break;
+
+                case UniformType_Double: {
+                    if(ImGui::InputDouble(label, &uniform->doubleValue)) {
+                        glUniform1d(uniform->location, uniform->doubleValue);
+                    }
+                } break;
 
                 case UniformType_BVec2: {} break;
                 case UniformType_BVec3: {} break;
@@ -584,9 +596,23 @@ int main()
                 case UniformType_UVec3: {} break;
                 case UniformType_UVec4: {} break;
 
-                case UniformType_Vec2: {} break;
-                case UniformType_Vec3: {} break;
-                case UniformType_Vec4: {} break;
+                case UniformType_Vec2: {
+                    if(ImGui::InputScalarN(label, ImGuiDataType_Float, (void*) uniform->fVectorValue, 2)) {
+                        glUniform2fv(uniform->location, 1, uniform->fVectorValue);
+                    }
+                } break;
+
+                case UniformType_Vec3: {
+                    if(ImGui::InputFloat3(label, uniform->fVectorValue)) {
+                        glUniform3fv(uniform->location, 1, uniform->fVectorValue);
+                    }
+                } break;
+
+                case UniformType_Vec4: {
+                    if(ImGui::InputFloat4(label, uniform->fVectorValue)) {
+                        glUniform4fv(uniform->location, 1, uniform->fVectorValue);
+                    }
+                } break;
 
                 case UniformType_DVec2: {} break;
                 case UniformType_DVec3: {} break;
