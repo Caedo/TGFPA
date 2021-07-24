@@ -588,13 +588,44 @@ int main()
                 case UniformType_BVec3: {} break;
                 case UniformType_BVec4: {} break;
 
-                case UniformType_IVec2: {} break;
-                case UniformType_IVec3: {} break;
-                case UniformType_IVec4: {} break;
+                case UniformType_IVec2: {
+                    if(ImGui::InputScalarN(label, ImGuiDataType_S32, (void*) uniform->iVectorValue, 2)) {
+                        glUniform2iv(uniform->location, 1, uniform->iVectorValue);
+                    }
+                }
+                break;
 
-                case UniformType_UVec2: {} break;
-                case UniformType_UVec3: {} break;
-                case UniformType_UVec4: {} break;
+                case UniformType_IVec3: {
+                    if(ImGui::InputScalarN(label, ImGuiDataType_S32, (void*) uniform->iVectorValue, 3)) {
+                        glUniform3iv(uniform->location, 1, uniform->iVectorValue);
+                    }
+                }
+                break;
+                
+                case UniformType_IVec4: {
+                    if(ImGui::InputScalarN(label, ImGuiDataType_S32, (void*) uniform->iVectorValue, 4)) {
+                        glUniform4iv(uniform->location, 1, uniform->iVectorValue);
+                    }
+                }
+                break;
+
+                case UniformType_UVec2: {
+                    if(ImGui::InputScalarN(label, ImGuiDataType_U32, (void*) uniform->uVectorValue, 2)) {
+                        glUniform2uiv(uniform->location, 1, uniform->uVectorValue);
+                    }
+                } break;
+
+                case UniformType_UVec3: {
+                    if(ImGui::InputScalarN(label, ImGuiDataType_U32, (void*) uniform->uVectorValue, 3)) {
+                        glUniform3uiv(uniform->location, 1, uniform->uVectorValue);
+                    }
+                } break;
+
+                case UniformType_UVec4: {
+                    if(ImGui::InputScalarN(label, ImGuiDataType_U32, (void*) uniform->uVectorValue, 4)) {
+                        glUniform4uiv(uniform->location, 1, uniform->uVectorValue);
+                    }
+                } break;
 
                 case UniformType_Vec2: {
                     if(ImGui::InputScalarN(label, ImGuiDataType_Float, (void*) uniform->fVectorValue, 2)) {

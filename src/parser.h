@@ -148,6 +148,8 @@ struct ShaderUniformData {
         int intValue;
 
         float fVectorValue[4];
+        int32_t iVectorValue[4];
+        uint32_t uVectorValue[4];
     };
 };
 
