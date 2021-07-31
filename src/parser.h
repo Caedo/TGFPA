@@ -4,8 +4,10 @@
 enum TypeOfToken { 
     Token_OpenBrace,
     Token_CloseBrace,
-    Token_OpenSquareBrace,
-    Token_CloseSquareBrace,
+    Token_OpenBracket,
+    Token_CloseBracket,
+    Token_OpenSquareBracket,
+    Token_CloseSquareBracket,
     Token_Comma,
     Token_Equal,
     Token_Semicolon,
@@ -41,115 +43,45 @@ struct ShaderInclude {
     Str8 path;
 };
 
-enum UniformType {
-    // scalars
+enum UniformScalarType {
     UniformType_Bool,
     UniformType_Int,
-    UniformType_Uint,
+    UniformType_UInt,
     UniformType_Float,
     UniformType_Double,
-
-    // vectors
-    UniformType_BVec2,
-    UniformType_BVec3,
-    UniformType_BVec4,
-
-    UniformType_IVec2,
-    UniformType_IVec3,
-    UniformType_IVec4,
-
-    UniformType_UVec2,
-    UniformType_UVec3,
-    UniformType_UVec4,
-
-    UniformType_Vec2,
-    UniformType_Vec3,
-    UniformType_Vec4,
-
-    UniformType_DVec2,
-    UniformType_DVec3,
-    UniformType_DVec4,
-
-    UniformType_Mat2,
-    UniformType_Mat3,
-    UniformType_Mat4,
-
-    UniformType_Mat2x2,
-    UniformType_Mat2x3,
-    UniformType_Mat2x4,
-
-    UniformType_Mat3x2,
-    UniformType_Mat3x3,
-    UniformType_Mat3x4,
-
-    UniformType_Mat4x2,
-    UniformType_Mat4x3,
-    UniformType_Mat4x4,
-    UniformType_Count
+    UniformType_Matrix,
+    UniformType_Count,
 };
 
-char* UniformTypeNames[] {
-    // scalars
-    "bool",
-    "int",
-    "uint",
-    "float",
-    "double",
-
-    // vectors
-    "bvec2",
-    "bvec3",
-    "bvec4",
-
-    "ivec2",
-    "ivec3",
-    "ivec4",
-
-    "uvec2",
-    "uvec3",
-    "uvec4",
-
-    "vec2",
-    "vec3",
-    "vec4",
-
-    "dvec2",
-    "dvec3",
-    "dvec4",
-
-    "mat2",
-    "mat3",
-    "mat4",
-
-    "mat2x2",
-    "mat2x3",
-    "mat2x4",
-
-    "mat3x2",
-    "mat3x3",
-    "mat3x4",
-
-    "mat4x2",
-    "mat4x3",
-    "mat4x4",
+enum UniformAttribFlag {
+    UniformAttribFlag_None = 0,
+    UniformAttribFlag_Color = 1,
+    UniformAttribFlag_Range = 2,
 };
 
 struct ShaderUniformData {
     char name[128];
-    UniformType type;
     GLint location;
+
+    int vectorLength;
+
+    int matrixWidth;
+    int matrixHeight;
 
     bool isArray;
     int arrayLength;
 
-    union {
-        float floatValue;
-        double doubleValue;
-        int intValue;
+    int attributeFlags;
 
-        float fVectorValue[4];
-        int32_t iVectorValue[4];
-        uint32_t uVectorValue[4];
+    float minRangeValue;
+    float maxRangeValue;
+
+    UniformScalarType type;
+    union {
+        float    floatValue[4];
+        double   doubleValue[4];
+        int32_t  intValue[4];
+        uint32_t uintValue[4];
     };
 };
 

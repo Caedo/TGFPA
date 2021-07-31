@@ -32,6 +32,8 @@ struct Str8 {
     uint64_t length;
 };
 
+#define Str8Lit(c) Str8{c, strlen(c)}
+
 #include "memory_management.h"
 #include "parser.h"
 
@@ -99,6 +101,9 @@ void main() { \n \
 const char shaderHeader[] =
 "#version 330 core\n"
 
+"#define COLOR() \n"
+"#define RANGE(a, b) \n"
+
 "out vec4 FragColor;\n"
 
 "in vec3 position;\n"
@@ -140,6 +145,17 @@ double deltaTime;
 
 int frame;
 
+#define glUniform(size, type) glUniform ## size ## type ## v
+
+template <typename T>
+T Clamp(T v, T a, T b) { return (v < a) ? a : ((v > b) : b : v); }
+
+template <typename T>
+T Min(T v, T a) { return v < a ? v : a; }
+
+template <typename T>
+T Max(T v, T a) { return v > a ? v : a; }
+
 static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
@@ -150,16 +166,12 @@ bool CompileShader(Str8 fragmentSource, GLuint* shader) {
     char infoLog[1024] = {};
 
     char* sources[2] = {};
-    int lengths[2] = {};
 
     sources[0] = (char*) shaderHeader;
     sources[1] = fragmentSource.string;
 
-    lengths[0] = IM_ARRAYSIZE(shaderHeader);
-    lengths[1] = (GLint) fragmentSource.length;
-
     GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragShader, 2, sources, lengths);
+    glShaderSource(fragShader, 2, sources, NULL);
     glCompileShader(fragShader);
 
     glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
@@ -329,6 +341,84 @@ void DrawMenuBar() {
     }
 }
 
+void DrawFloat(ShaderUniformData* uniform) {
+    assert(uniform->type == UniformType_Float);
+
+    bool changed = false;
+    if(uniform->attributeFlags & UniformAttribFlag_Range) {
+        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength, &uniform->minRangeValue, &uniform->maxRangeValue);
+    }
+    else if(uniform->attributeFlags & UniformAttribFlag_Color && 
+        (uniform->vectorLength == 3 || uniform->vectorLength == 4))
+    {
+        if(uniform->vectorLength == 3) {
+            changed = ImGui::ColorEdit3(uniform->name, uniform->floatValue);
+        }
+        else {
+            changed = ImGui::ColorEdit4(uniform->name, uniform->floatValue);
+        }
+    }
+    else {
+        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength);
+    }
+
+    // if(result)
+    //     glUniform1f(uniform->location, uniform->floatValue);
+}
+
+void DrawDouble(ShaderUniformData* uniform) {
+    assert(uniform->type == UniformType_Double);
+
+    bool changed = false;
+    if(uniform->attributeFlags & UniformAttribFlag_Range) {
+        double min = (double) uniform->minRangeValue;
+        double max = (double) uniform->maxRangeValue;
+
+        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_Double, uniform->doubleValue, uniform->vectorLength, &min, &max);
+    }
+    else {
+        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_Double, uniform->doubleValue, uniform->vectorLength);
+    }
+
+    // if(result)
+    //     glUniform1d(uniform->location, uniform->doubleValue);
+}
+
+void DrawInt(ShaderUniformData* uniform) {
+    assert(uniform->type == UniformType_Int);
+
+    bool changed = false;
+    if(uniform->attributeFlags & UniformAttribFlag_Range) {
+        int min = (int) uniform->minRangeValue;
+        int max = (int) uniform->maxRangeValue;
+
+        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength, &min, &max);
+    }
+    else {
+        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength);
+    }
+
+    // if(changed) {
+    //     glUniform1i(uniform->location, uniform->intValue);
+    // }
+}
+
+void DrawUInt(ShaderUniformData* uniform) {
+    assert(uniform->type == UniformType_UInt);
+
+    bool changed = false;
+    if(uniform->attributeFlags & UniformAttribFlag_Range) {
+        uint32_t min = (uint32_t) Max(0.f, uniform->minRangeValue);
+        uint32_t max = (uint32_t) Max(0.f, uniform->maxRangeValue);
+
+        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_U32, &uniform->uintValue, uniform->vectorLength, &min, &max);
+    }
+    else {
+        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_U32, &uniform->uintValue, uniform->vectorLength);
+    }
+
+}
+
 int main()
 {
     // Setup window
@@ -483,6 +573,9 @@ int main()
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
+        static bool showUnsusedUniforms = true;
+        ImGui::Checkbox("Show Unsused Uniforms", &showUnsusedUniforms);
+
         int presetsCount = IM_ARRAYSIZE(TextureSizePresets);
         if(ImGui::BeginCombo("Size", TextureSizeLabels[selectedPresetIndex])) {
 
@@ -550,120 +643,18 @@ int main()
         }
 
         for(int i = 0; i < shader.uniformsCount; i++) {
-            if(shader.uniforms[i].location == -1)
+            if(showUnsusedUniforms == false && shader.uniforms[i].location == -1)
                 continue;
 
             ShaderUniformData* uniform = shader.uniforms + i;
-            const char* label = uniform->name;
 
-            switch(shader.uniforms[i].type) {
+            switch(uniform->type) {
                 case UniformType_Bool: {} break;
 
-                case UniformType_Int: {
-                    if(ImGui::InputInt(label, &uniform->intValue)) {
-                        glUniform1i(uniform->location, uniform->intValue);
-                    }
-                } 
-                break;
-
-                case UniformType_Uint: {
-                    // if(ImGui::InputInt(label, &uniform->floatValue)) {
-                    //     glUniform1f(uniform->location, uniform->floatValue);
-                    // }
-                } break;
-
-                case UniformType_Float: {
-                    if(ImGui::InputFloat(label, &uniform->floatValue)) {
-                        glUniform1f(uniform->location, uniform->floatValue);
-                    }
-                } break;
-
-                case UniformType_Double: {
-                    if(ImGui::InputDouble(label, &uniform->doubleValue)) {
-                        glUniform1d(uniform->location, uniform->doubleValue);
-                    }
-                } break;
-
-                case UniformType_BVec2: {} break;
-                case UniformType_BVec3: {} break;
-                case UniformType_BVec4: {} break;
-
-                case UniformType_IVec2: {
-                    if(ImGui::InputScalarN(label, ImGuiDataType_S32, (void*) uniform->iVectorValue, 2)) {
-                        glUniform2iv(uniform->location, 1, uniform->iVectorValue);
-                    }
-                }
-                break;
-
-                case UniformType_IVec3: {
-                    if(ImGui::InputScalarN(label, ImGuiDataType_S32, (void*) uniform->iVectorValue, 3)) {
-                        glUniform3iv(uniform->location, 1, uniform->iVectorValue);
-                    }
-                }
-                break;
-                
-                case UniformType_IVec4: {
-                    if(ImGui::InputScalarN(label, ImGuiDataType_S32, (void*) uniform->iVectorValue, 4)) {
-                        glUniform4iv(uniform->location, 1, uniform->iVectorValue);
-                    }
-                }
-                break;
-
-                case UniformType_UVec2: {
-                    if(ImGui::InputScalarN(label, ImGuiDataType_U32, (void*) uniform->uVectorValue, 2)) {
-                        glUniform2uiv(uniform->location, 1, uniform->uVectorValue);
-                    }
-                } break;
-
-                case UniformType_UVec3: {
-                    if(ImGui::InputScalarN(label, ImGuiDataType_U32, (void*) uniform->uVectorValue, 3)) {
-                        glUniform3uiv(uniform->location, 1, uniform->uVectorValue);
-                    }
-                } break;
-
-                case UniformType_UVec4: {
-                    if(ImGui::InputScalarN(label, ImGuiDataType_U32, (void*) uniform->uVectorValue, 4)) {
-                        glUniform4uiv(uniform->location, 1, uniform->uVectorValue);
-                    }
-                } break;
-
-                case UniformType_Vec2: {
-                    if(ImGui::InputScalarN(label, ImGuiDataType_Float, (void*) uniform->fVectorValue, 2)) {
-                        glUniform2fv(uniform->location, 1, uniform->fVectorValue);
-                    }
-                } break;
-
-                case UniformType_Vec3: {
-                    if(ImGui::InputFloat3(label, uniform->fVectorValue)) {
-                        glUniform3fv(uniform->location, 1, uniform->fVectorValue);
-                    }
-                } break;
-
-                case UniformType_Vec4: {
-                    if(ImGui::InputFloat4(label, uniform->fVectorValue)) {
-                        glUniform4fv(uniform->location, 1, uniform->fVectorValue);
-                    }
-                } break;
-
-                case UniformType_DVec2: {} break;
-                case UniformType_DVec3: {} break;
-                case UniformType_DVec4: {} break;
-
-                case UniformType_Mat2: {} break;
-                case UniformType_Mat3: {} break;
-                case UniformType_Mat4: {} break;
-
-                case UniformType_Mat2x2: {} break;
-                case UniformType_Mat2x3: {} break;
-                case UniformType_Mat2x4: {} break;
-
-                case UniformType_Mat3x2: {} break;
-                case UniformType_Mat3x3: {} break;
-                case UniformType_Mat3x4: {} break;
-
-                case UniformType_Mat4x2: {} break;
-                case UniformType_Mat4x3: {} break;
-                case UniformType_Mat4x4: {} break;
+                case UniformType_UInt:   DrawUInt(uniform);   break;
+                case UniformType_Int:    DrawInt(uniform);    break;
+                case UniformType_Float:  DrawFloat(uniform);  break;
+                case UniformType_Double: DrawDouble(uniform); break;
             }
         }
 

@@ -46,14 +46,16 @@ Token PeekNextToken(Tokenizer* tokenizer) {
     at++;
     switch (firstChar)
     {
-        case '{':  token.type = Token_OpenBrace;        break;
-        case '}':  token.type = Token_CloseBrace;       break;
-        case '[':  token.type = Token_OpenSquareBrace;  break;
-        case ']':  token.type = Token_CloseSquareBrace; break;
-        case '=':  token.type = Token_Equal;            break;
-        case ',':  token.type = Token_Comma;            break;
-        case '#':  token.type = Token_Hash;             break;
-        case ';':  token.type = Token_Semicolon;        break;
+        case '{':  token.type = Token_OpenBrace;          break;
+        case '}':  token.type = Token_CloseBrace;         break;
+        case '(':  token.type = Token_OpenBracket;        break;
+        case ')':  token.type = Token_CloseBracket;       break;
+        case '[':  token.type = Token_OpenSquareBracket;  break;
+        case ']':  token.type = Token_CloseSquareBracket; break;
+        case '=':  token.type = Token_Equal;              break;
+        case ',':  token.type = Token_Comma;              break;
+        case '#':  token.type = Token_Hash;               break;
+        case ';':  token.type = Token_Semicolon;          break;
         
         case '\0': {
             token.type = Token_EndOfStream;
@@ -85,7 +87,7 @@ Token PeekNextToken(Tokenizer* tokenizer) {
                 
                 token.length = (int) (at - token.text);
             }
-            else if(IsNumber(firstChar)) {
+            else if(IsNumber(firstChar) || firstChar == '-') {
                 token.type = Token_Number;
                 
                 while(IsNumber(at[0]) ||
@@ -161,10 +163,40 @@ bool IsTokenEqual(Token token, char* match) {
     return *at == 0;
 }
 
+bool TokenContains(Token token, Str8 str) {
+    for(int i = 0; i < token.length; i++) {
+
+        bool found = true;
+        for(int j = 0; j < str.length; j++) {
+            if(token.text[i] != str.string[j]) {
+                found = false;
+                break;
+            }
+
+            i++;
+            if(i >= token.length)
+                return false;
+        }
+
+        if(found)
+            return true;
+    }
+
+    return false;
+}
+
 void StringCopy(char* dest, char* source, int length) {
     for(int i = 0; i < length; i++) {
         dest[i] = source[i];
     }
+}
+
+float GetFloat(Token token) {
+    if(token.length == 0) 
+        return 0;
+    
+    float result = (float) atof(token.text);
+    return result;
 }
 
 ShaderInclude* GetShaderIncludes(char* shaderSource, MemoryArena* arena, int* includesCount) {
@@ -210,48 +242,121 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
 
     *count = 0;
 
+    // TODO: uniform metadata struct?
+    int attribFlags = 0;
+    float minRangeValue = 0;
+    float maxRangeValue = 0;
+
     while(tokenizer.parsing) {
         Token token = GetNextToken(&tokenizer);
 
-        if(token.type == Token_Identifier &&
-           IsTokenEqual(token, "uniform"))
+        if(token.type == Token_Identifier)
         {
-            Token typeToken = RequireToken(&tokenizer, Token_Identifier);
-            Token nameToken = RequireToken(&tokenizer, Token_Identifier);
+            if(IsTokenEqual(token, "uniform")) {
+                Token typeToken = RequireToken(&tokenizer, Token_Identifier);
+                Token nameToken = RequireToken(&tokenizer, Token_Identifier);
 
-            if(tokenizer.parsing == false)
-                return NULL;
-
-            ShaderUniformData* uniform = (ShaderUniformData*) PushArena(arena, sizeof(ShaderUniformData));
-
-            for(int i = 0; i < (int) UniformType_Count; i++) {
-                if(IsTokenEqual(typeToken, UniformTypeNames[i])) {
-                    uniform->type = (UniformType) i;
-                    fprintf(stderr, "%s\n", UniformTypeNames[i]);
-                    break;
-                }
-            }
-
-            StringCopy(uniform->name, nameToken.text, nameToken.length + 1);
-            uniform->name[nameToken.length] = 0;
-
-            Token potentialArrayToken = PeekNextToken(&tokenizer);
-            if(potentialArrayToken.type == Token_OpenSquareBrace) {
-                GetNextToken(&tokenizer);
-                Token lengthToken = RequireToken(&tokenizer, Token_Number);
-                RequireToken(&tokenizer, Token_CloseSquareBrace);
-
-                if(tokenizer.parsing == false) {
+                if(tokenizer.parsing == false)
                     return NULL;
+
+                ShaderUniformData* uniform = (ShaderUniformData*) PushArena(arena, sizeof(ShaderUniformData));
+
+                if(IsTokenEqual(typeToken, "bool")) {
+                    uniform->type = UniformType_Bool;
+                    uniform->vectorLength = 1;
+                }
+                else if(IsTokenEqual(typeToken, "int")) {
+                    uniform->type = UniformType_Int;
+                    uniform->vectorLength = 1;
+                }
+                else if(IsTokenEqual(typeToken, "uint")) {
+                    uniform->type = UniformType_UInt;
+                    uniform->vectorLength = 1;
+                }
+                else if(IsTokenEqual(typeToken, "float")) {
+                    uniform->type = UniformType_Float;
+                    uniform->vectorLength = 1;
+                }
+                else if(IsTokenEqual(typeToken, "double")) {
+                    uniform->type = UniformType_Double;
+                    uniform->vectorLength = 1;
+                }
+                else if(TokenContains(typeToken, Str8Lit("vec"))) {
+                    switch(typeToken.text[0]) {
+                        case 'b': uniform->type = UniformType_Bool;   break;
+                        case 'i': uniform->type = UniformType_Int;    break;
+                        case 'u': uniform->type = UniformType_UInt;   break;
+                        case 'v': uniform->type = UniformType_Float;  break;
+                        case 'd': uniform->type = UniformType_Double; break;
+                        default: fprintf(stderr, "SyntaxError..."); break; // TODO: Better errors
+                    }
+
+                    switch(typeToken.text[typeToken.length - 1]) {
+                        case '2': uniform->vectorLength = 2; break;
+                        case '3': uniform->vectorLength = 3; break;
+                        case '4': uniform->vectorLength = 4; break;
+                        default: fprintf(stderr, "SyntaxError..."); break; // TODO: Better errors
+                    }
+                }
+                else if(TokenContains(typeToken, Str8Lit("mat"))) {
+                    uniform->type = UniformType_Matrix;
                 }
 
-                uniform->isArray = true;
-                uniform->arrayLength = atoi(lengthToken.text);
+                StringCopy(uniform->name, nameToken.text, nameToken.length + 1);
+                uniform->name[nameToken.length] = 0;
+
+                Token potentialArrayToken = PeekNextToken(&tokenizer);
+                if(potentialArrayToken.type == Token_OpenSquareBracket) {
+                    GetNextToken(&tokenizer);
+                    Token lengthToken = RequireToken(&tokenizer, Token_Number);
+                    RequireToken(&tokenizer, Token_CloseSquareBracket);
+
+                    if(tokenizer.parsing == false) {
+                        return NULL;
+                    }
+
+                    uniform->isArray = true;
+                    uniform->arrayLength = atoi(lengthToken.text);
+                }
+
+                uniform->location = -1;
+
+                uniform->minRangeValue = minRangeValue;
+                uniform->maxRangeValue = maxRangeValue;
+                uniform->attributeFlags = attribFlags;
+
+                attribFlags = UniformAttribFlag_None;
+                minRangeValue = 0;
+                maxRangeValue = 0;
+
+                (*count)++;
             }
+            else if(IsTokenEqual(token, "COLOR")) {
+                RequireToken(&tokenizer, Token_OpenBracket);
+                RequireToken(&tokenizer, Token_CloseBracket);
 
-            uniform->location = -1;
+                if(tokenizer.parsing) {
+                    attribFlags |= UniformAttribFlag_Color;
+                }
+                else {
+                    // TODO: Better errors
+                    fprintf(stderr, "SyntaxError...");
+                }
+            }
+            else if(IsTokenEqual(token, "RANGE")) {
+                RequireToken(&tokenizer, Token_OpenBracket);
+                Token minToken = RequireToken(&tokenizer, Token_Number);
+                RequireToken(&tokenizer, Token_Comma);
+                Token maxToken = RequireToken(&tokenizer, Token_Number);
+                RequireToken(&tokenizer, Token_CloseBracket);
 
-            (*count)++;
+                if(tokenizer.parsing) {
+                    minRangeValue = GetFloat(minToken);
+                    maxRangeValue = GetFloat(maxToken);
+
+                    attribFlags |= UniformAttribFlag_Range;
+                }
+            }
         }
     }
 
