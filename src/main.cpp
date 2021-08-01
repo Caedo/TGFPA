@@ -362,8 +362,14 @@ void DrawFloat(ShaderUniformData* uniform) {
         changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength);
     }
 
-    // if(result)
-    //     glUniform1f(uniform->location, uniform->floatValue);
+    if(changed) {
+        switch(uniform->vectorLength) {
+            case 1: glUniform1fv(uniform->location, 1, uniform->floatValue); break;
+            case 2: glUniform2fv(uniform->location, 1, uniform->floatValue); break;
+            case 3: glUniform3fv(uniform->location, 1, uniform->floatValue); break;
+            case 4: glUniform4fv(uniform->location, 1, uniform->floatValue); break;
+        }
+    }
 }
 
 void DrawDouble(ShaderUniformData* uniform) {
@@ -380,8 +386,15 @@ void DrawDouble(ShaderUniformData* uniform) {
         changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_Double, uniform->doubleValue, uniform->vectorLength);
     }
 
-    // if(result)
-    //     glUniform1d(uniform->location, uniform->doubleValue);
+
+    if(changed) {
+        switch(uniform->vectorLength) {
+            case 1: glUniform1dv(uniform->location, 1, uniform->doubleValue); break;
+            case 2: glUniform2dv(uniform->location, 1, uniform->doubleValue); break;
+            case 3: glUniform3dv(uniform->location, 1, uniform->doubleValue); break;
+            case 4: glUniform4dv(uniform->location, 1, uniform->doubleValue); break;
+        }
+    }
 }
 
 void DrawInt(ShaderUniformData* uniform) {
@@ -398,9 +411,14 @@ void DrawInt(ShaderUniformData* uniform) {
         changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength);
     }
 
-    // if(changed) {
-    //     glUniform1i(uniform->location, uniform->intValue);
-    // }
+    if(changed) {
+        switch(uniform->vectorLength) {
+            case 1: glUniform1iv(uniform->location, 1, uniform->intValue); break;
+            case 2: glUniform2iv(uniform->location, 1, uniform->intValue); break;
+            case 3: glUniform3iv(uniform->location, 1, uniform->intValue); break;
+            case 4: glUniform4iv(uniform->location, 1, uniform->intValue); break;
+        }
+    }
 }
 
 void DrawUInt(ShaderUniformData* uniform) {
@@ -415,6 +433,15 @@ void DrawUInt(ShaderUniformData* uniform) {
     }
     else {
         changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_U32, &uniform->uintValue, uniform->vectorLength);
+    }
+
+    if(changed) {
+        switch(uniform->vectorLength) {
+            case 1: glUniform1uiv(uniform->location, 1, uniform->uintValue); break;
+            case 2: glUniform2uiv(uniform->location, 1, uniform->uintValue); break;
+            case 3: glUniform3uiv(uniform->location, 1, uniform->uintValue); break;
+            case 4: glUniform4uiv(uniform->location, 1, uniform->uintValue); break;
+        }
     }
 
 }
@@ -573,8 +600,12 @@ int main()
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
-        static bool showUnsusedUniforms = true;
-        ImGui::Checkbox("Show Unsused Uniforms", &showUnsusedUniforms);
+        ImGuiID dockspaceID = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+        ImGui::SetNextWindowDockID(dockspaceID , ImGuiCond_Once);
+
+        ImGui::Begin("Main");
+        
+        ImGui::BeginChild("Texture", ImVec2(512, 0));
 
         int presetsCount = IM_ARRAYSIZE(TextureSizePresets);
         if(ImGui::BeginCombo("Size", TextureSizeLabels[selectedPresetIndex])) {
@@ -642,6 +673,17 @@ int main()
             }
         }
 
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+
+        ImGui::BeginChild("Uniforms", ImVec2(0, 0), true);
+
+        static bool showUnsusedUniforms = true;
+        ImGui::Checkbox("Show Unsused Uniforms", &showUnsusedUniforms);
+
+        ImGui::Separator();
+
         for(int i = 0; i < shader.uniformsCount; i++) {
             if(showUnsusedUniforms == false && shader.uniforms[i].location == -1)
                 continue;
@@ -657,6 +699,9 @@ int main()
                 case UniformType_Double: DrawDouble(uniform); break;
             }
         }
+        ImGui::EndChild();
+
+        ImGui::End();
 
         // Rendering
 
