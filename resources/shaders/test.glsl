@@ -1,4 +1,6 @@
 
+LIB("noise2D")
+
 uniform int    uniform_int;
 uniform uint   uniform_uint;
 uniform bool   uniform_bool;
@@ -58,7 +60,9 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     vec2 uv = fragCoord/iResolution.xy;
 
     vec3 color = 0.5 + 0.5 * cos(iTime + uv.xyy);
-    color.z = 1;
+    float noise = snoise(uv * uniform_float_range);
+
+    color.r = noise;
 
     fragColor = vec4(color, 1.0);
 }

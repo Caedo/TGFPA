@@ -38,9 +38,8 @@ struct Tokenizer
     Token cachedToken;
 };
 
-struct ShaderInclude {
-    char* positionInSource;
-    Str8 path;
+struct ShaderLib {
+    Str8 name;
 };
 
 enum UniformScalarType {

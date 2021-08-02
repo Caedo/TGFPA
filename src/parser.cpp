@@ -199,31 +199,33 @@ float GetFloat(Token token) {
     return result;
 }
 
-ShaderInclude* GetShaderIncludes(char* shaderSource, MemoryArena* arena, int* includesCount) {
+ShaderLib* GetShaderLibs(char* shaderSource, MemoryArena* arena, int* libsCount) {
     Tokenizer tokenizer = {};
 
     tokenizer.position = shaderSource;
     tokenizer.parsing = true;
 
-    ShaderInclude* ret = (ShaderInclude*) ((char*)arena->baseAddres + arena->allocatedOffset);
+    *libsCount = 0;
+
+    ShaderLib* ret = (ShaderLib*) ((char*)arena->baseAddres + arena->allocatedOffset);
 
     while(tokenizer.parsing) {
         Token token = GetNextToken(&tokenizer);
-        if(token.type == Token_Hash) {
-            Token nextToken = GetNextToken(&tokenizer);
-            if(IsTokenEqual(nextToken, "include")) {
-                Token pathToken = RequireToken(&tokenizer, Token_String);
+        if(token.type == Token_Identifier) {
+            if(IsTokenEqual(token, "LIB")) {
+                RequireToken(&tokenizer, Token_OpenBracket);
+                Token nameToken = RequireToken(&tokenizer, Token_String);
+                RequireToken(&tokenizer, Token_CloseBracket);
 
                 if(tokenizer.parsing == false)
                     return NULL;
 
-                ShaderInclude* include = (ShaderInclude*) PushArena(arena, sizeof(ShaderInclude));
+                ShaderLib* lib = (ShaderLib*) PushArena(arena, sizeof(ShaderLib));
 
-                include->positionInSource = token.text;
-                include->path.string = pathToken.text + 1;
-                include->path.length = pathToken.length - 2;
+                lib->name.string = nameToken.text + 1;
+                lib->name.length = nameToken.length - 2;
 
-                (*includesCount)++;
+                (*libsCount)++;
             }
         }
     }

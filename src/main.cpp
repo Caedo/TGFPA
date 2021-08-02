@@ -60,6 +60,9 @@ struct Shader {
     int uniformsCount;
     ShaderUniformData* uniforms;
 
+    int libsCount;
+    ShaderLib* libs;
+
     // @Win32
     FILETIME lastWriteTime;
 };
@@ -103,6 +106,7 @@ const char shaderHeader[] =
 
 "#define COLOR() \n"
 "#define RANGE(a, b) \n"
+"#define LIB(name) \n"
 
 "out vec4 FragColor;\n"
 
@@ -161,24 +165,41 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-bool CompileShader(Str8 fragmentSource, GLuint* shader) {
+Str8 LoadShaderSource(Str8 filePath, MemoryArena* arena);
+
+bool CompileShader(Shader* shader) {
+    static const char* pathFormat = "shaders/lib/%.*s.glsl";
+
     int success;
     char infoLog[1024] = {};
 
-    char* sources[2] = {};
+    int shaderSourcesCount = shader->libsCount + 2;
+    char** sources = (char**) PushArena(&temporaryArena, shaderSourcesCount * sizeof(char**));
 
     sources[0] = (char*) shaderHeader;
-    sources[1] = fragmentSource.string;
+
+    for(int i = 0; i < shader->libsCount; i++) {
+        Str8 path = {};
+        path.length = IM_ARRAYSIZE(pathFormat) + shader->libs[i].name.length;
+        path.string = (char*) PushArena(&temporaryArena, path.length);
+
+        sprintf(path.string, pathFormat, shader->libs[i].name.length, shader->libs[i].name.string);
+
+        Str8 source = LoadShaderSource(path, &temporaryArena);
+        sources[i + 1] = source.string;
+    }
+
+    sources[shaderSourcesCount - 1] = shader->source.string;
 
     GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragShader, 2, sources, NULL);
+    glShaderSource(fragShader, shaderSourcesCount, sources, NULL);
     glCompileShader(fragShader);
 
     glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
     if(!success) {
         glGetShaderInfoLog(fragShader, sizeof(infoLog), NULL, infoLog);
         fprintf(stderr, "Failed to compile fragment shader: %s \n", infoLog);
-        fprintf(stderr, "\n %s \n\n", fragmentSource.string);
+        fprintf(stderr, "\n %s \n\n", shader->source.string);
 
         return false;
     }
@@ -196,7 +217,7 @@ bool CompileShader(Str8 fragmentSource, GLuint* shader) {
         return false;
     }
 
-    *shader = linkedShader;
+    shader->handle = linkedShader;
     return true;
 }
 
@@ -229,8 +250,9 @@ void CreateShader(Shader* shader) {
 
     shader->source   = LoadShaderSource(shader->filePath, &shader->shaderMemory);
     shader->uniforms = GetShaderUniforms(shader->source.string, &shader->shaderMemory, &shader->uniformsCount);
+    shader->libs     = GetShaderLibs(shader->source.string, &shader->shaderMemory, &shader->libsCount);
 
-    if(CompileShader(shader->source, &shader->handle) == false) {
+    if(CompileShader(shader) == false) {
         shader->isValid = false;
         return;
     }
