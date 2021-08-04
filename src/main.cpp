@@ -587,7 +587,7 @@ int main()
 
     glDeleteShader(errorFragmenHandle);
 
-    Shader shader = CreateShaderFromFile("./shaders/test.glsl");
+    Shader shader = CreateShaderFromFile("./shaders/default.glsl");
     Framebuffer framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
 
     // Main loop
