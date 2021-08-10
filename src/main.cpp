@@ -49,6 +49,8 @@ struct Shader {
     Str8 source;
     Str8 filePath;
 
+    Str8 errors;
+
     bool isValid;
 
     GLuint handle;
@@ -124,6 +126,13 @@ const char shaderHeader[] =
 "}\n\n"
 ;
 
+const char* defaultShader = 
+"void mainImage( out vec4 fragColor, in vec2 fragCoord ) {"
+"    vec2 uv = fragCoord/iResolution.x;"
+
+"    fragColor = vec4(uv, 1.0, 1.0);"
+"}";
+
 ImVec2 TextureSizePresets[] = {
     ImVec2(500, 256),
     ImVec2(256, 256),
@@ -170,8 +179,10 @@ Str8 LoadShaderSource(Str8 filePath, MemoryArena* arena);
 bool CompileShader(Shader* shader) {
     static const char* pathFormat = "shaders/lib/%.*s.glsl";
 
+    const int infoLogCapacity = 1024;
+
     int success;
-    char infoLog[1024] = {};
+    shader->errors.string = (char*) PushArena(&shader->shaderMemory, infoLogCapacity);
 
     int shaderSourcesCount = shader->libsCount + 2;
     char** sources = (char**) PushArena(&temporaryArena, shaderSourcesCount * sizeof(char**));
@@ -197,9 +208,12 @@ bool CompileShader(Shader* shader) {
 
     glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
     if(!success) {
-        glGetShaderInfoLog(fragShader, sizeof(infoLog), NULL, infoLog);
-        fprintf(stderr, "Failed to compile fragment shader: %s \n", infoLog);
-        fprintf(stderr, "\n %s \n\n", shader->source.string);
+        GLsizei logLen = 0;
+        glGetShaderInfoLog(fragShader, infoLogCapacity, &logLen, shader->errors.string);
+
+        fprintf(stderr, "Failed to compile fragment shader: %s \n", shader->errors.string);
+
+        shader->errors.length = logLen + 1;
 
         return false;
     }
@@ -211,8 +225,12 @@ bool CompileShader(Shader* shader) {
 
     glGetShaderiv(linkedShader, GL_LINK_STATUS, &success);
     if(!success) {
-        glGetShaderInfoLog(linkedShader, sizeof(infoLog), NULL, infoLog);
-        fprintf(stderr, "Failed to link shaders: %s \n", infoLog);
+        GLsizei logLen = 0;
+        glGetShaderInfoLog(linkedShader, infoLogCapacity, &logLen, shader->errors.string);
+
+        fprintf(stderr, "Failed to link shaders: %s \n", shader->errors.string);
+
+        shader->errors.length += logLen + 1;
 
         return false;
     }
@@ -667,16 +685,22 @@ int main()
         }
 
         ImGui::Image((void*)(intptr_t)framebuffer.colorTexture, ImVec2((float) framebuffer.width, (float) framebuffer.height));
+
         if(ImGui::Button("Save")) {
-            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
+            Str8 savePath = SaveFileDialog(&temporaryArena);
+            if(savePath.string) {
+                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
 
-            void* textureBuffer = PushArena(&temporaryArena, framebuffer.width * framebuffer.height);
-            
-            glReadBuffer(GL_COLOR_ATTACHMENT0);
-            glReadPixels(0, 0, framebuffer.width, framebuffer.height, GL_RGB, GL_UNSIGNED_BYTE, textureBuffer);
-            stbi_write_png("test.png", framebuffer.width, framebuffer.height, 3 /*RGB*/, textureBuffer, framebuffer.width * 3);
+                void* textureBuffer = PushArena(&temporaryArena, framebuffer.width * framebuffer.height);
+                
+                glReadBuffer(GL_COLOR_ATTACHMENT0);
+                glReadPixels(0, 0, framebuffer.width, framebuffer.height, GL_RGB, GL_UNSIGNED_BYTE, textureBuffer);
 
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+                stbi_write_png(savePath.string, framebuffer.width, framebuffer.height, 3 /*RGB*/, textureBuffer, framebuffer.width * 3);
+
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            }
         }
 
         ImGui::SameLine();
@@ -695,31 +719,49 @@ int main()
             }
         }
 
+        // ImGui::SameLine();
+        // if(ImGui::Button("New")) {
+
+        // }
+
         ImGui::EndChild();
 
         ImGui::SameLine();
 
-        ImGui::BeginChild("Uniforms", ImVec2(0, 0), true);
+        ImGui::BeginChild("Right", ImVec2(0, 0), true);
+        if(ImGui::BeginTabBar("RightTabBar")) {
 
-        static bool showUnsusedUniforms = true;
-        ImGui::Checkbox("Show Unsused Uniforms", &showUnsusedUniforms);
+            if(ImGui::BeginTabItem("Uniforms")) {
+                static bool showUnsusedUniforms = true;
+                ImGui::Checkbox("Show Unsused Uniforms", &showUnsusedUniforms);
 
-        ImGui::Separator();
+                ImGui::Separator();
 
-        for(int i = 0; i < shader.uniformsCount; i++) {
-            if(showUnsusedUniforms == false && shader.uniforms[i].location == -1)
-                continue;
+                for(int i = 0; i < shader.uniformsCount; i++) {
+                    if(showUnsusedUniforms == false && shader.uniforms[i].location == -1)
+                        continue;
 
-            ShaderUniformData* uniform = shader.uniforms + i;
+                    ShaderUniformData* uniform = shader.uniforms + i;
 
-            switch(uniform->type) {
-                case UniformType_Bool: {} break;
+                    switch(uniform->type) {
+                        case UniformType_Bool: {} break;
 
-                case UniformType_UInt:   DrawUInt(uniform);   break;
-                case UniformType_Int:    DrawInt(uniform);    break;
-                case UniformType_Float:  DrawFloat(uniform);  break;
-                case UniformType_Double: DrawDouble(uniform); break;
+                        case UniformType_UInt:   DrawUInt(uniform);   break;
+                        case UniformType_Int:    DrawInt(uniform);    break;
+                        case UniformType_Float:  DrawFloat(uniform);  break;
+                        case UniformType_Double: DrawDouble(uniform); break;
+                    }
+                }
+
+                ImGui::EndTabItem();
             }
+
+            if(ImGui::BeginTabItem("Errors")) {
+                ImGui::TextWrapped(shader.errors.string);
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
         }
         ImGui::EndChild();
 

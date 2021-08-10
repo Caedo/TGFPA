@@ -46,3 +46,33 @@ char* OpenFileDialog(MemoryArena* arena) {
     
     return NULL;
 }
+
+Str8 SaveFileDialog(MemoryArena* arena) {
+    assert(arena);
+    assert(arena->baseAddres);
+    
+    OPENFILENAME ofn = {};       // common dialog box structure
+    
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL; // TODO: Add GLFW window handle
+    ofn.lpstrFile = (LPSTR) PushArena(arena, MAX_PATH);
+    
+    // Set lpstrFile[0] to '\0' so that GetOpenFileName does not 
+    // use the contents of szFile to initialize itself.
+    ofn.lpstrFile[0] = '\0';
+    
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrFilter = "All\0*.*\0";
+    ofn.nFilterIndex = 1;
+
+    ofn.lpstrInitialDir = NULL;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT;
+    
+    // Display the Open dialog box. 
+    BOOL result = GetSaveFileName(&ofn);
+    if(result) {
+        return Str8{ofn.lpstrFile, strlen(ofn.lpstrFile)};
+    }
+    
+    return {};
+}
