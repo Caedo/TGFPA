@@ -77,6 +77,28 @@ struct Framebuffer {
     int height;
 };
 
+struct WindowData {
+    char label[64];
+
+    Shader shader;
+    Framebuffer framebuffer;
+
+    int framebufferDisplayWidth;
+    int framebufferDisplayHeight;
+
+    int selectedPresetIndex;
+    bool showUnsusedUniforms;
+};
+
+ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+GLFWwindow* window;
+
+const int MaxWindowsCount = 16;
+int currentWindowCount;
+WindowData windowsData[MaxWindowsCount];
+WindowData* focusedWindow;
+
 bool show_demo_window;
 
 const char* vertexShader =
@@ -126,12 +148,12 @@ const char shaderHeader[] =
 "}\n\n"
 ;
 
-const char* defaultShader = 
-"void mainImage( out vec4 fragColor, in vec2 fragCoord ) {"
-"    vec2 uv = fragCoord/iResolution.x;"
-
-"    fragColor = vec4(uv, 1.0, 1.0);"
-"}";
+const char* defaultShaderSource = 
+"void mainImage( out vec4 fragColor, in vec2 fragCoord ) {\n"
+"    vec2 uv = fragCoord/iResolution.x;\n"
+"\n"
+"    fragColor = vec4(uv, 1.0, 1.0);\n"
+"}\n";
 
 ImVec2 TextureSizePresets[] = {
     ImVec2(500, 256),
@@ -148,8 +170,6 @@ char* TextureSizeLabels[] = {
     "Custom...",
 };
 
-int selectedPresetIndex;
-
 GLuint vertexShaderHandle;
 GLuint errorShaderHandle;
 
@@ -157,8 +177,6 @@ double time;
 double deltaTime;
 
 int frame;
-
-#define glUniform(size, type) glUniform ## size ## type ## v
 
 template <typename T>
 T Clamp(T v, T a, T b) { return (v < a) ? a : ((v > b) : b : v); }
@@ -175,6 +193,7 @@ static void glfw_error_callback(int error, const char* description)
 }
 
 Str8 LoadShaderSource(Str8 filePath, MemoryArena* arena);
+void CreateNewShaderWindow();
 
 bool CompileShader(Shader* shader) {
     static const char* pathFormat = "shaders/lib/%.*s.glsl";
@@ -365,10 +384,98 @@ void ResizeFrambuffer(Framebuffer* frambuffer, int width, int height) {
     }
 }
 
+void DrawToFramebuffer(Framebuffer* framebuffer, Shader* shader) {
+    glUseProgram(shader->isValid ? 
+                 shader->handle :
+                 errorShaderHandle);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->handle);
+
+    glUniform2i(shader->resolutionLocation, (int) framebuffer->width, (int) framebuffer->height);
+    glUniform1f(shader->timeLocation, (float) time);
+    glUniform1f(shader->timeDeltaLocation, (float) deltaTime);
+    glUniform1i(shader->frameLocation, frame);
+
+    glViewport(0, 0, framebuffer->width, framebuffer->height);
+    glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 
 void DrawMenuBar() {
     if(ImGui::BeginMainMenuBar()) {
         
+        if(ImGui::BeginMenu("File")) {
+            if(ImGui::MenuItem("New...")) {
+
+                Str8 savePath = SaveFileDialog(&temporaryArena);
+                if(savePath.string) {
+                    FILE* file = fopen(savePath.string, "wb");
+                    if(file) {
+                        fputs(defaultShaderSource, file);
+
+                        fclose(file);
+                    }
+                }
+            }
+
+            if(ImGui::MenuItem("Open...")) {
+                char* path = OpenFileDialog(&temporaryArena);
+                if(path) {
+                    assert(focusedWindow);
+
+                    Shader* shader = &focusedWindow->shader;
+                    UnloadShader(shader);
+
+                    int len = (int) strlen(path) + 1;
+                    shader->filePath.string = (char*) PushArena(&shader->shaderMemory, len);
+                    shader->filePath.length = len;
+
+                    memcpy(shader->filePath.string, path, len);
+
+                    ReloadShader(shader);
+                }
+            }
+
+            if(ImGui::MenuItem("Save...")) {
+                Str8 savePath = SaveFileDialog(&temporaryArena);
+                if(savePath.string) {
+                    Framebuffer* framebuffer = &focusedWindow->framebuffer;
+
+                    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->handle);
+
+                    void* textureBuffer = PushArena(&temporaryArena, framebuffer->width * framebuffer->height);
+                    
+                    glReadBuffer(GL_COLOR_ATTACHMENT0);
+                    glReadPixels(0, 0, framebuffer->width, framebuffer->height, GL_RGB, GL_UNSIGNED_BYTE, textureBuffer);
+
+
+                    stbi_write_png(savePath.string, framebuffer->width, framebuffer->height, 3 /*RGB*/, textureBuffer, framebuffer->width * 3);
+
+                    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                }
+            }
+
+            ImGui::Separator();
+            if(ImGui::MenuItem("Close")) {
+                glfwSetWindowShouldClose(window, GLFW_TRUE);
+            }
+            
+            ImGui::EndMenu();
+        }
+
+        if(ImGui::BeginMenu("Window")) {
+            if(ImGui::MenuItem("New")) {
+                CreateNewShaderWindow();
+            }
+
+            ImGui::EndMenu();
+        }
+
         if(ImGui::BeginMenu("Help")) {
             if(ImGui::MenuItem("Show/Hide ImGui help")) {
                 show_demo_window = !show_demo_window;
@@ -486,6 +593,110 @@ void DrawUInt(ShaderUniformData* uniform) {
 
 }
 
+void CreateNewShaderWindow() {
+    if(currentWindowCount >= MaxWindowsCount) {
+        return;
+    }
+    
+    sprintf(windowsData[currentWindowCount].label, "Window %d", currentWindowCount);
+    windowsData[currentWindowCount].shader = CreateShaderFromFile("./shaders/default.glsl");
+    windowsData[currentWindowCount].framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
+
+    if(focusedWindow == NULL) {
+        focusedWindow = windowsData;
+    }
+
+    currentWindowCount++;
+}
+
+void DrawWindow(WindowData* windowData) {
+    ImGui::Begin(windowData->label);
+
+    if(ImGui::IsWindowFocused()) {
+        focusedWindow = windowData;
+    }
+    
+    ImGui::BeginChild("Texture", ImVec2(512, 0));
+
+    int presetsCount = IM_ARRAYSIZE(TextureSizePresets);
+    if(ImGui::BeginCombo("Size", TextureSizeLabels[windowData->selectedPresetIndex])) {
+
+        // NOTE: Labels should have (presetsCount + 1) elements
+        for(int i = 0; i <= presetsCount; i++) {
+            if(ImGui::Selectable(TextureSizeLabels[i], windowData->selectedPresetIndex == i)) {
+                windowData->selectedPresetIndex = i;
+
+                if(i < presetsCount) {
+                    ResizeFrambuffer(&windowData->framebuffer, (int) TextureSizePresets[i].x, (int) TextureSizePresets[i].y);
+                }
+            }
+        }
+
+        ImGui::EndCombo();
+    }
+
+    if(windowData->selectedPresetIndex == presetsCount) {
+        ImGui::PushItemWidth(ImGui::GetFontSize() * 12);
+
+        ImGui::InputInt("Width", &windowData->framebufferDisplayWidth);
+        ImGui::SameLine();
+        ImGui::InputInt("Height", &windowData->framebufferDisplayHeight);
+        ImGui::PopItemWidth();
+
+        if(windowData->framebufferDisplayWidth <= 0)  windowData->framebufferDisplayWidth = 1;
+        if(windowData->framebufferDisplayHeight <= 0) windowData->framebufferDisplayHeight = 1;
+
+        ImGui::SameLine();
+        if(ImGui::Button("Apply")) {
+            ResizeFrambuffer(&windowData->framebuffer, windowData->framebufferDisplayWidth, windowData->framebufferDisplayHeight);
+        }
+    }
+
+    ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, ImVec2((float) windowData->framebuffer.width, (float) windowData->framebuffer.height));
+
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+
+    ImGui::BeginChild("Right", ImVec2(0, 0), true);
+    if(ImGui::BeginTabBar("RightTabBar")) {
+
+        if(ImGui::BeginTabItem("Uniforms")) {
+            ImGui::Checkbox("Show Unsused Uniforms", &windowData->showUnsusedUniforms);
+
+            ImGui::Separator();
+
+            for(int i = 0; i < windowData->shader.uniformsCount; i++) {
+                if(windowData->showUnsusedUniforms == false && windowData->shader.uniforms[i].location == -1)
+                    continue;
+
+                ShaderUniformData* uniform = windowData->shader.uniforms + i;
+
+                switch(uniform->type) {
+                    case UniformType_Bool: {} break;
+
+                    case UniformType_UInt:   DrawUInt(uniform);   break;
+                    case UniformType_Int:    DrawInt(uniform);    break;
+                    case UniformType_Float:  DrawFloat(uniform);  break;
+                    case UniformType_Double: DrawDouble(uniform); break;
+                }
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        if(ImGui::BeginTabItem("Errors")) {
+            ImGui::TextWrapped(windowData->shader.errors.string);
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+    ImGui::EndChild();
+
+    ImGui::End();
+}
+
 int main()
 {
     // Setup window
@@ -499,7 +710,7 @@ int main()
     //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
     
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "TGFPA", NULL, NULL);
+    window = glfwCreateWindow(1280, 720, "TGFPA", NULL, NULL);
     if (window == NULL)
         return 1;
 
@@ -531,8 +742,6 @@ int main()
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     // Our state
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
     float vertices[] = { // Pos, UV
         -1.0f, -1.0f, 0.0f,  0.0f, 0.0f, // bot left
          1.0f, -1.0f, 0.0f,  1.0f, 0.0f, // bot right
@@ -605,18 +814,11 @@ int main()
 
     glDeleteShader(errorFragmenHandle);
 
-    Shader shader = CreateShaderFromFile("./shaders/default.glsl");
-    Framebuffer framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
+    CreateNewShaderWindow();
 
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
-        // @Win32 Call
-        FILETIME currentModifyTime = GetLastWriteTime(shader.filePath.string);
-        if(CompareFileTime(&currentModifyTime, &shader.lastWriteTime) != 0) {
-            ReloadShader(&shader);
-            printf("RELOADING SHADER on path: %s \n", shader.filePath.string);
-        }
 
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
@@ -633,6 +835,15 @@ int main()
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+
+        for(int i = 0; i < currentWindowCount; i++) {
+            // @Win32 Call
+            FILETIME currentModifyTime = GetLastWriteTime(windowsData[i].shader.filePath.string);
+            if(CompareFileTime(&currentModifyTime, &windowsData[i].shader.lastWriteTime) != 0) {
+                ReloadShader(&windowsData[i].shader);
+                printf("RELOADING SHADER on path: %s \n", windowsData[i].shader.filePath.string);
+            }
+        }
         
         DrawMenuBar();
         
@@ -640,159 +851,21 @@ int main()
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
+        for(int i = 0; i < currentWindowCount; i++) {
+            DrawToFramebuffer(&windowsData[i].framebuffer, &windowsData[i].shader);
+        }
+
         ImGuiID dockspaceID = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-        ImGui::SetNextWindowDockID(dockspaceID , ImGuiCond_Once);
-
-        ImGui::Begin("Main");
-        
-        ImGui::BeginChild("Texture", ImVec2(512, 0));
-
-        int presetsCount = IM_ARRAYSIZE(TextureSizePresets);
-        if(ImGui::BeginCombo("Size", TextureSizeLabels[selectedPresetIndex])) {
-
-            // NOTE: Labels should have (presetsCount + 1) elements
-            for(int i = 0; i <= presetsCount; i++) {
-                if(ImGui::Selectable(TextureSizeLabels[i], selectedPresetIndex == i)) {
-                    selectedPresetIndex = i;
-
-                    if(i < presetsCount) {
-                        ResizeFrambuffer(&framebuffer, (int) TextureSizePresets[i].x, (int) TextureSizePresets[i].y);
-                    }
-                }
-            }
-
-            ImGui::EndCombo();
+        for(int i = 0; i < currentWindowCount; i++) {
+            ImGui::SetNextWindowDockID(dockspaceID , ImGuiCond_Once);
+            DrawWindow(windowsData + i);
         }
-
-        // NOTE: TODO: Move to other struct when (if?) multiple shaders are added
-        static int width = 512;
-        static int height = 512;
-        if(selectedPresetIndex == presetsCount) {
-            ImGui::PushItemWidth(ImGui::GetFontSize() * 12);
-
-            ImGui::InputInt("Width", &width);
-            ImGui::SameLine();
-            ImGui::InputInt("Height", &height);
-            ImGui::PopItemWidth();
-
-            if(width <= 0) width = 1;
-            if(height <= 0) height = 1;
-
-            ImGui::SameLine();
-            if(ImGui::Button("Apply")) {
-                ResizeFrambuffer(&framebuffer, width, height);
-            }
-        }
-
-        ImGui::Image((void*)(intptr_t)framebuffer.colorTexture, ImVec2((float) framebuffer.width, (float) framebuffer.height));
-
-        if(ImGui::Button("Save")) {
-            Str8 savePath = SaveFileDialog(&temporaryArena);
-            if(savePath.string) {
-                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
-
-                void* textureBuffer = PushArena(&temporaryArena, framebuffer.width * framebuffer.height);
-                
-                glReadBuffer(GL_COLOR_ATTACHMENT0);
-                glReadPixels(0, 0, framebuffer.width, framebuffer.height, GL_RGB, GL_UNSIGNED_BYTE, textureBuffer);
-
-
-                stbi_write_png(savePath.string, framebuffer.width, framebuffer.height, 3 /*RGB*/, textureBuffer, framebuffer.width * 3);
-
-                glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            }
-        }
-
-        ImGui::SameLine();
-        if(ImGui::Button("Open")) {
-            char* path = OpenFileDialog(&temporaryArena);
-            if(path) {
-                UnloadShader(&shader);
-
-                int len = (int) strlen(path) + 1;
-                shader.filePath.string = (char*) PushArena(&shader.shaderMemory, len);
-                shader.filePath.length = len;
-
-                memcpy(shader.filePath.string, path, len);
-
-                ReloadShader(&shader);
-            }
-        }
-
-        // ImGui::SameLine();
-        // if(ImGui::Button("New")) {
-
-        // }
-
-        ImGui::EndChild();
-
-        ImGui::SameLine();
-
-        ImGui::BeginChild("Right", ImVec2(0, 0), true);
-        if(ImGui::BeginTabBar("RightTabBar")) {
-
-            if(ImGui::BeginTabItem("Uniforms")) {
-                static bool showUnsusedUniforms = true;
-                ImGui::Checkbox("Show Unsused Uniforms", &showUnsusedUniforms);
-
-                ImGui::Separator();
-
-                for(int i = 0; i < shader.uniformsCount; i++) {
-                    if(showUnsusedUniforms == false && shader.uniforms[i].location == -1)
-                        continue;
-
-                    ShaderUniformData* uniform = shader.uniforms + i;
-
-                    switch(uniform->type) {
-                        case UniformType_Bool: {} break;
-
-                        case UniformType_UInt:   DrawUInt(uniform);   break;
-                        case UniformType_Int:    DrawInt(uniform);    break;
-                        case UniformType_Float:  DrawFloat(uniform);  break;
-                        case UniformType_Double: DrawDouble(uniform); break;
-                    }
-                }
-
-                ImGui::EndTabItem();
-            }
-
-            if(ImGui::BeginTabItem("Errors")) {
-                ImGui::TextWrapped(shader.errors.string);
-                ImGui::EndTabItem();
-            }
-
-            ImGui::EndTabBar();
-        }
-        ImGui::EndChild();
-
-        ImGui::End();
 
         // Rendering
 
         ImGui::Render();
 
         int display_w, display_h;
-
-        // Draw to framebuffer
-
-        glUseProgram(shader.isValid ? 
-                     shader.handle :
-                     errorShaderHandle);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.handle);
-
-        glUniform2i(shader.resolutionLocation, (int) framebuffer.width, (int) framebuffer.height);
-        glUniform1f(shader.timeLocation, (float) time);
-        glUniform1f(shader.timeDeltaLocation, (float) deltaTime);
-        glUniform1i(shader.frameLocation, frame);
-
-        glViewport(0, 0, framebuffer.width, framebuffer.height);
-        glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // draw application
         glfwGetFramebufferSize(window, &display_w, &display_h);
