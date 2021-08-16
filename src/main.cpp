@@ -412,7 +412,7 @@ void DrawMenuBar() {
         if(ImGui::BeginMenu("File")) {
             if(ImGui::MenuItem("New...")) {
 
-                Str8 savePath = SaveFileDialog(&temporaryArena);
+                Str8 savePath = SaveFileDialog(&temporaryArena, "GLSL file (.glsl)\0*.glsl\0");
                 if(savePath.string) {
                     FILE* file = fopen(savePath.string, "wb");
                     if(file) {
@@ -424,7 +424,7 @@ void DrawMenuBar() {
             }
 
             if(ImGui::MenuItem("Open...")) {
-                char* path = OpenFileDialog(&temporaryArena);
+                char* path = OpenFileDialog(&temporaryArena, "GLSL file (.glsl)\0*.glsl\0");
                 if(path) {
                     assert(focusedWindow);
 
@@ -442,7 +442,7 @@ void DrawMenuBar() {
             }
 
             if(ImGui::MenuItem("Save...")) {
-                Str8 savePath = SaveFileDialog(&temporaryArena);
+                Str8 savePath = SaveFileDialog(&temporaryArena, "PNG file (.png)\0.png\0");
                 if(savePath.string) {
                     Framebuffer* framebuffer = &focusedWindow->framebuffer;
 

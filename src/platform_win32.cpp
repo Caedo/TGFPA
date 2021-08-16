@@ -13,7 +13,7 @@ FILETIME GetLastWriteTime(char* filename) {
     return ret;
 }
 
-char* OpenFileDialog(MemoryArena* arena) {
+char* OpenFileDialog(MemoryArena* arena, const char* extensions) {
     assert(arena);
     assert(arena->baseAddres);
     
@@ -21,13 +21,14 @@ char* OpenFileDialog(MemoryArena* arena) {
     
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = NULL; // TODO: Add GLFW window handle
+
+    ofn.nMaxFile = MAX_PATH;
     ofn.lpstrFile = (LPSTR) PushArena(arena, MAX_PATH);
     
     // Make sure, that path is an empty string
     ofn.lpstrFile[0] = '\0';
-    
-    ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrFilter = "All\0*.*\0";
+
+    ofn.lpstrFilter = extensions;
     ofn.nFilterIndex = 1;
     
     // if(fileName != nullptr) {
@@ -47,7 +48,7 @@ char* OpenFileDialog(MemoryArena* arena) {
     return NULL;
 }
 
-Str8 SaveFileDialog(MemoryArena* arena) {
+Str8 SaveFileDialog(MemoryArena* arena, const char* extensions) {
     assert(arena);
     assert(arena->baseAddres);
     
@@ -62,7 +63,7 @@ Str8 SaveFileDialog(MemoryArena* arena) {
     ofn.lpstrFile[0] = '\0';
     
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrFilter = "All\0*.*\0";
+    ofn.lpstrFilter = extensions;
     ofn.nFilterIndex = 1;
 
     ofn.lpstrInitialDir = NULL;

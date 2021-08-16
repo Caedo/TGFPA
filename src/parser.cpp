@@ -233,6 +233,89 @@ ShaderLib* GetShaderLibs(char* shaderSource, MemoryArena* arena, int* libsCount)
     return ret;
 }
 
+void GetTypeData(Token token, UniformScalarType* type, int* vectorLength) {
+    assert(token.type == Token_Identifier);
+
+    if(IsTokenEqual(token, "bool")) {
+        *type = UniformType_Bool;
+        *vectorLength = 1;
+    }
+    else if(IsTokenEqual(token, "int")) {
+        *type = UniformType_Int;
+        *vectorLength = 1;
+    }
+    else if(IsTokenEqual(token, "uint")) {
+        *type = UniformType_UInt;
+        *vectorLength = 1;
+    }
+    else if(IsTokenEqual(token, "float")) {
+        *type = UniformType_Float;
+        *vectorLength = 1;
+    }
+    else if(IsTokenEqual(token, "double")) {
+        *type = UniformType_Double;
+        *vectorLength = 1;
+    }
+    else if(TokenContains(token, Str8Lit("vec"))) {
+        switch(token.text[0]) {
+            case 'b': *type = UniformType_Bool;   break;
+            case 'i': *type = UniformType_Int;    break;
+            case 'u': *type = UniformType_UInt;   break;
+            case 'v': *type = UniformType_Float;  break;
+            case 'd': *type = UniformType_Double; break;
+            default: fprintf(stderr, "SyntaxError..."); break; // TODO: Better errors
+        }
+
+        switch(token.text[token.length - 1]) {
+            case '2': *vectorLength = 2; break;
+            case '3': *vectorLength = 3; break;
+            case '4': *vectorLength = 4; break;
+            default: fprintf(stderr, "SyntaxError..."); break; // TODO: Better errors
+        }
+    }
+    else if(TokenContains(token, Str8Lit("mat"))) {
+        *type = UniformType_Matrix;
+    }
+}
+
+void GetNumber(Token token, void* dest, UniformScalarType type) {
+    switch(type) {
+        case UniformType_Int: {
+            int value = (int) GetFloat(token);
+            *((int*) dest) = value;
+        }
+        break;
+
+        case UniformType_Float: {
+            float value = GetFloat(token);
+            *((float*) dest) = value;
+        }
+        break;
+
+        case UniformType_UInt: {
+            uint32_t value = (uint32_t) GetFloat(token);
+            *((uint32_t*) dest) = value;
+        }
+        break;
+
+        case UniformType_Double: {
+            double value = (double) GetFloat(token);
+            *((double*) dest) = value;
+        }
+        break;
+
+        case UniformType_Bool: {
+            bool value = (bool) GetFloat(token);
+            *((bool*) dest) = value;
+        }
+        break;
+
+        default: {
+            // TODO: Better errors
+            fprintf(stderr, "Not handled type in GetNumber()");
+        }
+    }
+}
 
 ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int* count) {
     Tokenizer tokenizer = {};
@@ -263,52 +346,13 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
 
                 ShaderUniformData* uniform = (ShaderUniformData*) PushArena(arena, sizeof(ShaderUniformData));
 
-                if(IsTokenEqual(typeToken, "bool")) {
-                    uniform->type = UniformType_Bool;
-                    uniform->vectorLength = 1;
-                }
-                else if(IsTokenEqual(typeToken, "int")) {
-                    uniform->type = UniformType_Int;
-                    uniform->vectorLength = 1;
-                }
-                else if(IsTokenEqual(typeToken, "uint")) {
-                    uniform->type = UniformType_UInt;
-                    uniform->vectorLength = 1;
-                }
-                else if(IsTokenEqual(typeToken, "float")) {
-                    uniform->type = UniformType_Float;
-                    uniform->vectorLength = 1;
-                }
-                else if(IsTokenEqual(typeToken, "double")) {
-                    uniform->type = UniformType_Double;
-                    uniform->vectorLength = 1;
-                }
-                else if(TokenContains(typeToken, Str8Lit("vec"))) {
-                    switch(typeToken.text[0]) {
-                        case 'b': uniform->type = UniformType_Bool;   break;
-                        case 'i': uniform->type = UniformType_Int;    break;
-                        case 'u': uniform->type = UniformType_UInt;   break;
-                        case 'v': uniform->type = UniformType_Float;  break;
-                        case 'd': uniform->type = UniformType_Double; break;
-                        default: fprintf(stderr, "SyntaxError..."); break; // TODO: Better errors
-                    }
-
-                    switch(typeToken.text[typeToken.length - 1]) {
-                        case '2': uniform->vectorLength = 2; break;
-                        case '3': uniform->vectorLength = 3; break;
-                        case '4': uniform->vectorLength = 4; break;
-                        default: fprintf(stderr, "SyntaxError..."); break; // TODO: Better errors
-                    }
-                }
-                else if(TokenContains(typeToken, Str8Lit("mat"))) {
-                    uniform->type = UniformType_Matrix;
-                }
-
                 StringCopy(uniform->name, nameToken.text, nameToken.length + 1);
                 uniform->name[nameToken.length] = 0;
 
-                Token potentialArrayToken = PeekNextToken(&tokenizer);
-                if(potentialArrayToken.type == Token_OpenSquareBracket) {
+                GetTypeData(typeToken, &uniform->type, &uniform->vectorLength);
+
+                Token nextToken = PeekNextToken(&tokenizer);
+                if(nextToken.type == Token_OpenSquareBracket) {
                     GetNextToken(&tokenizer);
                     Token lengthToken = RequireToken(&tokenizer, Token_Number);
                     RequireToken(&tokenizer, Token_CloseSquareBracket);
@@ -319,6 +363,48 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
 
                     uniform->isArray = true;
                     uniform->arrayLength = atoi(lengthToken.text);
+                }
+                else if(nextToken.type == Token_Equal) {
+                    GetNextToken(&tokenizer);
+                    nextToken = PeekNextToken(&tokenizer);
+                    if(nextToken.type == Token_Identifier) {
+                        GetNextToken(&tokenizer);
+
+                        UniformScalarType defaultValueType;
+                        int defaultValueLength;
+
+                        GetTypeData(nextToken, &defaultValueType, &defaultValueLength);
+
+                        if(defaultValueLength != uniform->vectorLength ||
+                           defaultValueType != uniform->type) {
+                            tokenizer.parsing = false;
+                            break;
+                        }
+
+                        RequireToken(&tokenizer, Token_OpenBracket);
+
+
+                        for(int i = 0; i < 4; i++) {
+                            Token valueToken = GetNextToken(&tokenizer);
+                            if(valueToken.type == Token_Number) {
+                                GetNumber(valueToken, (void*) &(uniform->floatValue[i]), defaultValueType);
+
+                            }
+                            else {
+                                break;
+                            }
+
+                            nextToken = PeekNextToken(&tokenizer);
+                            if(nextToken.type == Token_CloseBracket) {
+                                break;
+                            }
+                            else {
+                                GetNextToken(&tokenizer);
+                            }
+                        }
+
+                        RequireToken(&tokenizer, Token_CloseBracket);
+                    }
                 }
 
                 uniform->location = -1;
