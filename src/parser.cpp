@@ -368,6 +368,8 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
                     GetNextToken(&tokenizer);
                     nextToken = PeekNextToken(&tokenizer);
                     if(nextToken.type == Token_Identifier) {
+                        // parse default types with specified type, for example:
+                        // vec4(1,1,1,1), float(2.0), etc.
                         GetNextToken(&tokenizer);
 
                         UniformScalarType defaultValueType;
@@ -383,10 +385,10 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
 
                         RequireToken(&tokenizer, Token_OpenBracket);
 
-
                         for(int i = 0; i < 4; i++) {
                             Token valueToken = GetNextToken(&tokenizer);
                             if(valueToken.type == Token_Number) {
+                                // TODO: will not work for doubles
                                 GetNumber(valueToken, (void*) &(uniform->floatValue[i]), defaultValueType);
 
                             }
@@ -404,6 +406,12 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
                         }
 
                         RequireToken(&tokenizer, Token_CloseBracket);
+                    }
+                    else if(nextToken.type == Token_Number) {
+                        // parse default types for scalars
+
+                        Token valueToken = GetNextToken(&tokenizer);
+                        GetNumber(valueToken, (void*) uniform->floatValue, uniform->type);
                     }
                 }
 
