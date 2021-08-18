@@ -652,7 +652,10 @@ void DrawWindow(WindowData* windowData) {
         }
     }
 
-    ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, ImVec2((float) windowData->framebuffer.width, (float) windowData->framebuffer.height));
+    float imageWidth = Min(512.f, (float) windowData->framebuffer.width);
+    float imageHeight = imageWidth * ((float) windowData->framebuffer.height / (float) windowData->framebuffer.width);
+
+    ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, ImVec2(imageWidth, imageHeight));
 
     ImGui::EndChild();
 
