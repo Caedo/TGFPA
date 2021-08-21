@@ -599,7 +599,7 @@ void CreateNewShaderWindow() {
     }
     
     sprintf(windowsData[currentWindowCount].label, "Window %d", currentWindowCount);
-    windowsData[currentWindowCount].shader = CreateShaderFromFile("./shaders/default.glsl");
+    windowsData[currentWindowCount].shader = CreateShaderFromFile(".\\\\shaders\\\\default.glsl");
     windowsData[currentWindowCount].framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
 
     if(focusedWindow == NULL) {
@@ -656,6 +656,10 @@ void DrawWindow(WindowData* windowData) {
     float imageHeight = imageWidth * ((float) windowData->framebuffer.height / (float) windowData->framebuffer.width);
 
     ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, ImVec2(imageWidth, imageHeight));
+
+    if(ImGui::Button("Open shader file")) {
+        ShellExecute(0, "open", windowData->shader.filePath.string, 0, 0 , SW_SHOW);
+    }
 
     ImGui::EndChild();
 
