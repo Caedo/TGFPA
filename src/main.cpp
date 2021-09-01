@@ -22,17 +22,7 @@
 #include "stb/stb_image_write.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
 
-#define Bytes(n) n
-#define Kilobytes(n) (1024 * (uint64_t)(n))
-#define Megabytes(n) (1024 * (uint64_t)Kilobytes(n))
-#define Gigabytes(n) (1024 * (uint64_t)Megabytes(n))
-
-struct Str8 {
-    char* string;
-    uint64_t length;
-};
-
-#define Str8Lit(c) Str8{c, strlen(c)}
+#include "common.h"
 
 #include "memory_management.h"
 #include "parser.h"
@@ -420,7 +410,7 @@ void DrawMenuBar() {
         if(ImGui::BeginMenu("File")) {
             if(ImGui::MenuItem("New...")) {
 
-                Str8 savePath = SaveFileDialog(&temporaryArena, "GLSL file (.glsl)\0*.glsl\0");
+                Str8 savePath = SaveFileDialog(&temporaryArena, FileType_Shader);
                 if(savePath.string) {
                     FILE* file = fopen(savePath.string, "wb");
                     if(file) {
@@ -432,7 +422,7 @@ void DrawMenuBar() {
             }
 
             if(ImGui::MenuItem("Open...")) {
-                char* path = OpenFileDialog(&temporaryArena, "GLSL file (.glsl)\0*.glsl\0");
+                char* path = OpenFileDialog(&temporaryArena, FileType_Shader);
                 if(path) {
                     assert(focusedWindow);
 
@@ -450,7 +440,7 @@ void DrawMenuBar() {
             }
 
             if(ImGui::MenuItem("Save...")) {
-                Str8 savePath = SaveFileDialog(&temporaryArena, "PNG file (.png)\0.png\0");
+                Str8 savePath = SaveFileDialog(&temporaryArena, FileType_Image);
                 if(savePath.string) {
                     Framebuffer* framebuffer = &focusedWindow->framebuffer;
 

@@ -13,7 +13,22 @@ FILETIME GetLastWriteTime(char* filename) {
     return ret;
 }
 
-char* OpenFileDialog(MemoryArena* arena, const char* extensions) {
+void FillOFNStruct(OPENFILENAME* ofn, FileType fileType) {
+    switch(fileType) {
+        case FileType_Shader: {
+            ofn->lpstrFilter = "GLSL file (.glsl)\0*.glsl\0";
+            ofn->lpstrDefExt = ".glsl";
+        }
+        break;
+
+        case FileType_Image: {
+            ofn->lpstrFilter = "PNG file (.png)\0*.png\0";
+            ofn->lpstrDefExt = ".png";
+        }
+    }
+}
+
+char* OpenFileDialog(MemoryArena* arena, FileType fileType) {
     assert(arena);
     assert(arena->baseAddres);
     
@@ -28,9 +43,8 @@ char* OpenFileDialog(MemoryArena* arena, const char* extensions) {
     // Make sure, that path is an empty string
     ofn.lpstrFile[0] = '\0';
 
-    ofn.lpstrFilter = extensions;
-    ofn.nFilterIndex = 1;
-    
+    FillOFNStruct(&ofn, fileType);
+
     // if(fileName != nullptr) {
     //     ofn.lpstrFileTitle = (LPSTR) fileName->str;
     //     ofn.nMaxFileTitle = (DWORD) fileName->capacity;
@@ -48,7 +62,7 @@ char* OpenFileDialog(MemoryArena* arena, const char* extensions) {
     return NULL;
 }
 
-Str8 SaveFileDialog(MemoryArena* arena, const char* extensions) {
+Str8 SaveFileDialog(MemoryArena* arena, FileType fileType) {
     assert(arena);
     assert(arena->baseAddres);
     
@@ -63,8 +77,8 @@ Str8 SaveFileDialog(MemoryArena* arena, const char* extensions) {
     ofn.lpstrFile[0] = '\0';
     
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrFilter = extensions;
-    ofn.nFilterIndex = 1;
+
+    FillOFNStruct(&ofn, fileType);
 
     ofn.lpstrInitialDir = NULL;
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT;
