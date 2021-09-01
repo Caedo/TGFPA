@@ -119,6 +119,7 @@ const char shaderHeader[] =
 "#version 330 core\n"
 
 "#define COLOR() \n"
+"#define DRAG() \n"
 "#define RANGE(a, b) \n"
 "#define LIB(name) \n"
 
@@ -493,6 +494,9 @@ void DrawFloat(ShaderUniformData* uniform) {
     if(uniform->attributeFlags & UniformAttribFlag_Range) {
         changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength, &uniform->minRangeValue, &uniform->maxRangeValue);
     }
+    else if(uniform->attributeFlags & UniformAttribFlag_Drag) {
+        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength);
+    }
     else if(uniform->attributeFlags & UniformAttribFlag_Color && 
         (uniform->vectorLength == 3 || uniform->vectorLength == 4))
     {
@@ -527,6 +531,9 @@ void DrawDouble(ShaderUniformData* uniform) {
 
         changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_Double, uniform->doubleValue, uniform->vectorLength, &min, &max);
     }
+    if(uniform->attributeFlags & UniformAttribFlag_Drag) {
+        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_Double, uniform->doubleValue, uniform->vectorLength);
+    }
     else {
         changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_Double, uniform->doubleValue, uniform->vectorLength);
     }
@@ -552,6 +559,9 @@ void DrawInt(ShaderUniformData* uniform) {
 
         changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength, &min, &max);
     }
+    if(uniform->attributeFlags & UniformAttribFlag_Drag) {
+        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength);
+    }
     else {
         changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength);
     }
@@ -575,6 +585,9 @@ void DrawUInt(ShaderUniformData* uniform) {
         uint32_t max = (uint32_t) Max(0.f, uniform->maxRangeValue);
 
         changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_U32, &uniform->uintValue, uniform->vectorLength, &min, &max);
+    }
+    if(uniform->attributeFlags & UniformAttribFlag_Drag) {
+        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_U32, &uniform->uintValue, uniform->vectorLength);
     }
     else {
         changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_U32, &uniform->uintValue, uniform->vectorLength);

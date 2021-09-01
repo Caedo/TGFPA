@@ -58,6 +58,38 @@ uniform vec3 uniform_float3_range;
 RANGE(-5, 5)
 uniform vec4 uniform_float4_range;
 
+
+DRAG()
+uniform int   uniform_int_drag;
+DRAG()
+uniform uint  uniform_uint_drag;
+DRAG()
+uniform bool  uniform_bool_drag;
+DRAG()
+uniform float uniform_float_drag;
+
+DRAG()
+uniform ivec2 uniform_int2_drag;
+DRAG()
+uniform ivec3 uniform_int3_drag;
+DRAG()
+uniform ivec4 uniform_int4_drag;
+
+DRAG()
+uniform uvec2 uniform_uint2_drag;
+DRAG()
+uniform uvec3 uniform_uint3_drag;
+DRAG()
+uniform uvec4 uniform_uint4_drag;
+
+DRAG()
+uniform vec2 uniform_float2_drag;
+DRAG()
+uniform vec3 uniform_float3_drag;
+DRAG()
+uniform vec4 uniform_float4_drag;
+
+
 COLOR()
 uniform vec3 uniform_color3;
 

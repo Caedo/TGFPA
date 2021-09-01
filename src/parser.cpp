@@ -439,6 +439,18 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
                     fprintf(stderr, "SyntaxError...");
                 }
             }
+            else if(IsTokenEqual(token, "DRAG")) {
+                RequireToken(&tokenizer, Token_OpenBracket);
+                RequireToken(&tokenizer, Token_CloseBracket);
+
+                if(tokenizer.parsing) {
+                    attribFlags |= UniformAttribFlag_Drag;
+                }
+                else {
+                    // TODO: Better errors
+                    fprintf(stderr, "SyntaxError...");
+                }
+            }
             else if(IsTokenEqual(token, "RANGE")) {
                 RequireToken(&tokenizer, Token_OpenBracket);
                 Token minToken = RequireToken(&tokenizer, Token_Number);

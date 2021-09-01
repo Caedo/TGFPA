@@ -53,9 +53,10 @@ enum UniformScalarType {
 };
 
 enum UniformAttribFlag {
-    UniformAttribFlag_None = 0,
+    UniformAttribFlag_None  = 0,
     UniformAttribFlag_Color = 1,
     UniformAttribFlag_Range = 2,
+    UniformAttribFlag_Drag  = 4,
 };
 
 struct ShaderUniformData {
