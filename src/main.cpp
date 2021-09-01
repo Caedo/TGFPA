@@ -216,7 +216,15 @@ bool CompileShader(Shader* shader) {
         sprintf(path.string, pathFormat, shader->libs[i].name.length, shader->libs[i].name.string);
 
         Str8 source = LoadShaderSource(path, &temporaryArena);
-        sources[i + 1] = source.string;
+        if(source.string) {
+            sources[i + 1] = source.string;
+        }
+        else {
+            // Error
+            shader->errors.length = sprintf(shader->errors.string, "Can't open library file '%.*s' \n", (int) shader->libs[i].name.length, shader->libs[i].name.string);
+
+            return false;
+        }
     }
 
     sources[shaderSourcesCount - 1] = shader->source.string;
