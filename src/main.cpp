@@ -77,7 +77,6 @@ struct WindowData {
     int framebufferDisplayHeight;
 
     int selectedPresetIndex;
-    bool showUnsusedUniforms;
 };
 
 ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -680,15 +679,12 @@ void DrawWindow(WindowData* windowData) {
     if(ImGui::BeginTabBar("RightTabBar")) {
 
         if(ImGui::BeginTabItem("Uniforms")) {
-            ImGui::Checkbox("Show Unsused Uniforms", &windowData->showUnsusedUniforms);
-
-            ImGui::Separator();
-
             for(int i = 0; i < windowData->shader.uniformsCount; i++) {
-                if(windowData->showUnsusedUniforms == false && windowData->shader.uniforms[i].location == -1)
-                    continue;
-
                 ShaderUniformData* uniform = windowData->shader.uniforms + i;
+
+                if(uniform->location == -1) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                }
 
                 switch(uniform->type) {
                     case UniformType_Bool: {} break;
@@ -697,6 +693,10 @@ void DrawWindow(WindowData* windowData) {
                     case UniformType_Int:    DrawInt(uniform);    break;
                     case UniformType_Float:  DrawFloat(uniform);  break;
                     case UniformType_Double: DrawDouble(uniform); break;
+                }
+
+                if(uniform->location == -1) {
+                    ImGui::PopStyleColor();
                 }
             }
 
