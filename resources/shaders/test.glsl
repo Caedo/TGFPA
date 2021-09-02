@@ -28,12 +28,15 @@ uniform vec2 uniform_float2;
 uniform vec3 uniform_float3;
 uniform vec4 uniform_float4;
 
+uniform bvec2 uniform_bool2;
+uniform bvec3 uniform_bool3;
+uniform bvec4 uniform_bool4;
+
+
 RANGE(-5, 5)
 uniform int   uniform_int_range;
 RANGE(-5, 5)
 uniform uint  uniform_uint_range;
-RANGE(-5, 5)
-uniform bool  uniform_bool_range;
 RANGE(-5, 5)
 uniform float uniform_float_range;
 
@@ -63,8 +66,6 @@ DRAG()
 uniform int   uniform_int_drag;
 DRAG()
 uniform uint  uniform_uint_drag;
-DRAG()
-uniform bool  uniform_bool_drag;
 DRAG()
 uniform float uniform_float_drag;
 

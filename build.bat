@@ -14,13 +14,8 @@ if "%1" == "release" (
     set compile_flags=%compile_flags% /O2
     set linker_flags=%linker_flags% /SUBSYSTEM:windows /ENTRY:mainCRTStartup
 ) else (
-    set compile_flags=%compile_flags% /fsanitize=address
+    set compile_flags=%compile_flags% /DDEBUG /fsanitize=address
 )
-
-if "%1" == "trace" (
-    set compile_flags=%compile_flags% -DMTR_ENABLED
-)
-
 
 if not exist build mkdir build
 pushd build

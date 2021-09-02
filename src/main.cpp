@@ -600,7 +600,33 @@ void DrawUInt(ShaderUniformData* uniform) {
             case 4: glUniform4uiv(uniform->location, 1, uniform->uintValue); break;
         }
     }
+}
 
+void DrawBool(ShaderUniformData* uniform) {
+    assert(uniform->type == UniformType_Bool);
+
+    bool changed = false;
+    for(int i = 0; i < uniform->vectorLength; i++) {
+        ImGui::PushID((void*) (uniform->intValue + i));
+
+        bool c = ImGui::Checkbox("", (bool*) (uniform->intValue + i));
+        changed = changed || c;
+
+        ImGui::PopID();
+
+        ImGui::SameLine();
+    }
+
+    ImGui::TextUnformatted(uniform->name);
+
+    if(changed) {
+        switch(uniform->vectorLength) {
+            case 1: glUniform1iv(uniform->location, 1, uniform->intValue); break;
+            case 2: glUniform2iv(uniform->location, 1, uniform->intValue); break;
+            case 3: glUniform3iv(uniform->location, 1, uniform->intValue); break;
+            case 4: glUniform4iv(uniform->location, 1, uniform->intValue); break;
+        }
+    }
 }
 
 void CreateNewShaderWindow() {
@@ -609,7 +635,13 @@ void CreateNewShaderWindow() {
     }
     
     sprintf(windowsData[currentWindowCount].label, "Window %d", currentWindowCount);
+
+#if defined(DEBUG)
+    windowsData[currentWindowCount].shader = CreateShaderFromFile(".\\\\shaders\\\\test.glsl");
+#else
     windowsData[currentWindowCount].shader = CreateShaderFromFile(".\\\\shaders\\\\default.glsl");
+#endif
+
     windowsData[currentWindowCount].framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
 
     if(focusedWindow == NULL) {
@@ -687,8 +719,7 @@ void DrawWindow(WindowData* windowData) {
                 }
 
                 switch(uniform->type) {
-                    case UniformType_Bool: {} break;
-
+                    case UniformType_Bool:   DrawBool(uniform);   break;
                     case UniformType_UInt:   DrawUInt(uniform);   break;
                     case UniformType_Int:    DrawInt(uniform);    break;
                     case UniformType_Float:  DrawFloat(uniform);  break;
