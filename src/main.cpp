@@ -83,6 +83,12 @@ ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 GLFWwindow* window;
 
+#if DEBUG
+    const Str8 defaultShaderPath = Str8Lit(".\\\\shaders\\\\test.glsl");
+#else
+    const Str8 defaultShaderPath = Str8Lit(".\\\\shaders\\\\default.glsl");
+#endif
+
 const int MaxWindowsCount = 16;
 int currentWindowCount;
 WindowData windowsData[MaxWindowsCount];
@@ -183,7 +189,7 @@ static void glfw_error_callback(int error, const char* description)
 }
 
 Str8 LoadShaderSource(Str8 filePath, MemoryArena* arena);
-void CreateNewShaderWindow();
+void CreateNewShaderWindow(Str8 filePath);
 
 bool CompileShader(Shader* shader) {
     static const char* pathFormat = "shaders/lib/%.*s.glsl";
@@ -304,16 +310,15 @@ void CreateShader(Shader* shader) {
     shader->isValid = true;
 }
 
-Shader CreateShaderFromFile(char* filePath) {
+Shader CreateShaderFromFile(Str8 filePath) {
     Shader ret = {};
     ret.shaderMemory = CreateArena();
 
-    ret.filePath.length = strlen(filePath) + 1;
-    ret.filePath.string = (char*) PushArena(&ret.shaderMemory, ret.filePath.length);
+    ret.filePath.length = filePath.length;
+    ret.filePath.string = (char*) PushArena(&ret.shaderMemory, ret.filePath.length + 1);
+    memcpy(ret.filePath.string, filePath.string, ret.filePath.length + 1);
 
-    ret.lastWriteTime = GetLastWriteTime(filePath);
-
-    memcpy(ret.filePath.string, filePath, ret.filePath.length);
+    ret.lastWriteTime = GetLastWriteTime(filePath.string);
 
     CreateShader(&ret);
 
@@ -330,12 +335,12 @@ void UnloadShader(Shader* shader) {
 
 void ReloadShader(Shader* shader) {
     uint64_t pathLen = shader->filePath.length;
-    char* temp = (char*) PushArena(&temporaryArena, pathLen);
-    memcpy(temp, shader->filePath.string, pathLen);
+    char* temp = (char*) PushArena(&temporaryArena, pathLen + 1);
+    memcpy(temp, shader->filePath.string, pathLen + 1);
 
     ClearArena(&shader->shaderMemory);
-    shader->filePath.string = (char*) PushArena(&shader->shaderMemory, pathLen);
-    memcpy(shader->filePath.string, temp, pathLen);
+    shader->filePath.string = (char*) PushArena(&shader->shaderMemory, pathLen + 1);
+    memcpy(shader->filePath.string, temp, pathLen + 1);
 
     glDeleteShader(shader->handle);
     
@@ -415,25 +420,30 @@ void DrawMenuBar() {
                     FILE* file = fopen(savePath.string, "wb");
                     if(file) {
                         fputs(defaultShaderSource, file);
-
                         fclose(file);
+
+                        // @TODO @SPEED: closing file just to reopen it later
+                        CreateNewShaderWindow(savePath);
                     }
                 }
             }
 
             if(ImGui::MenuItem("Open...")) {
-                char* path = OpenFileDialog(&temporaryArena, FileType_Shader);
-                if(path) {
+                Str8 path = OpenFileDialog(&temporaryArena, FileType_Shader);
+                if(path.string) {
                     assert(focusedWindow);
 
                     Shader* shader = &focusedWindow->shader;
                     UnloadShader(shader);
 
-                    int len = (int) strlen(path) + 1;
-                    shader->filePath.string = (char*) PushArena(&shader->shaderMemory, len);
-                    shader->filePath.length = len;
+                    shader->filePath.string = (char*) PushArena(&shader->shaderMemory, path.length + 1);
+                    shader->filePath.length = path.length;
 
-                    memcpy(shader->filePath.string, path, len);
+                    memcpy(shader->filePath.string, path.string, path.length + 1);
+
+                    Str8 fileName = GetFileNameFromPath(path);
+                    memcpy(focusedWindow->label, fileName.string, fileName.length + 1);
+
 
                     ReloadShader(shader);
                 }
@@ -468,7 +478,7 @@ void DrawMenuBar() {
 
         if(ImGui::BeginMenu("Window")) {
             if(ImGui::MenuItem("New")) {
-                CreateNewShaderWindow();
+                CreateNewShaderWindow(defaultShaderPath);
             }
 
             ImGui::EndMenu();
@@ -530,7 +540,7 @@ void DrawDouble(ShaderUniformData* uniform) {
 
         changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_Double, uniform->doubleValue, uniform->vectorLength, &min, &max);
     }
-    if(uniform->attributeFlags & UniformAttribFlag_Drag) {
+    else if(uniform->attributeFlags & UniformAttribFlag_Drag) {
         changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_Double, uniform->doubleValue, uniform->vectorLength);
     }
     else {
@@ -558,7 +568,7 @@ void DrawInt(ShaderUniformData* uniform) {
 
         changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength, &min, &max);
     }
-    if(uniform->attributeFlags & UniformAttribFlag_Drag) {
+    else if(uniform->attributeFlags & UniformAttribFlag_Drag) {
         changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength);
     }
     else {
@@ -629,18 +639,15 @@ void DrawBool(ShaderUniformData* uniform) {
     }
 }
 
-void CreateNewShaderWindow() {
+void CreateNewShaderWindow(Str8 filePath) {
     if(currentWindowCount >= MaxWindowsCount) {
         return;
     }
     
-    sprintf(windowsData[currentWindowCount].label, "Window %d", currentWindowCount);
+    Str8 fileName = GetFileNameFromPath(filePath);
+    memcpy(windowsData[currentWindowCount].label, fileName.string, fileName.length + 1);
 
-#if defined(DEBUG)
-    windowsData[currentWindowCount].shader = CreateShaderFromFile(".\\\\shaders\\\\test.glsl");
-#else
-    windowsData[currentWindowCount].shader = CreateShaderFromFile(".\\\\shaders\\\\default.glsl");
-#endif
+    windowsData[currentWindowCount].shader = CreateShaderFromFile(filePath);
 
     windowsData[currentWindowCount].framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
 
@@ -863,7 +870,7 @@ int main()
 
     glDeleteShader(errorFragmenHandle);
 
-    CreateNewShaderWindow();
+    CreateNewShaderWindow(defaultShaderPath);
 
     // Main loop
     while (!glfwWindowShouldClose(window))

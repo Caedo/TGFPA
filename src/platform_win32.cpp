@@ -28,7 +28,7 @@ void FillOFNStruct(OPENFILENAME* ofn, FileType fileType) {
     }
 }
 
-char* OpenFileDialog(MemoryArena* arena, FileType fileType) {
+Str8 OpenFileDialog(MemoryArena* arena, FileType fileType) {
     assert(arena);
     assert(arena->baseAddres);
     
@@ -56,10 +56,10 @@ char* OpenFileDialog(MemoryArena* arena, FileType fileType) {
     // Display the Open dialog box. 
     BOOL result = GetOpenFileName(&ofn);
     if(result) {
-        return ofn.lpstrFile;
+        return Str8{ofn.lpstrFile, strlen(ofn.lpstrFile)};
     }
     
-    return NULL;
+    return {};
 }
 
 Str8 SaveFileDialog(MemoryArena* arena, FileType fileType) {

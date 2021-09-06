@@ -14,3 +14,18 @@ enum FileType {
     FileType_Shader,
     FileType_Image,
 };
+
+Str8 GetFileNameFromPath(Str8 path) {
+
+    char* at = path.string + path.length - 1;
+    while(at != path.string) {
+        if(*at == '\\' || *at == '/') {
+            at++;
+            break;
+        }
+
+        at--;
+    }
+
+    return Str8{ at, (uint64_t) (path.string + path.length - at) };
+}
