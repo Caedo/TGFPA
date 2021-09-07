@@ -22,6 +22,10 @@
 #include "stb/stb_image_write.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
+#undef STB_IMAGE_IMPLEMENTATION
+
 #include "common.h"
 
 #include "memory_management.h"
@@ -78,6 +82,8 @@ struct WindowData {
 
     int selectedPresetIndex;
 };
+
+unsigned int checkerTexture;
 
 ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
@@ -358,7 +364,7 @@ Framebuffer CreateFramebuffer(int width, int height) {
 
     glGenTextures(1, &ret.colorTexture);
     glBindTexture(GL_TEXTURE_2D, ret.colorTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -379,7 +385,7 @@ void ResizeFrambuffer(Framebuffer* frambuffer, int width, int height) {
 
     if(frambuffer->width != width || frambuffer->height != height) {
         glBindTexture(GL_TEXTURE_2D, frambuffer->colorTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
         glBindTexture(GL_TEXTURE_2D, 0);
 
         frambuffer->width = width;
@@ -459,10 +465,10 @@ void DrawMenuBar() {
                     void* textureBuffer = PushArena(&temporaryArena, framebuffer->width * framebuffer->height);
                     
                     glReadBuffer(GL_COLOR_ATTACHMENT0);
-                    glReadPixels(0, 0, framebuffer->width, framebuffer->height, GL_RGB, GL_UNSIGNED_BYTE, textureBuffer);
+                    glReadPixels(0, 0, framebuffer->width, framebuffer->height, GL_RGBA, GL_UNSIGNED_BYTE, textureBuffer);
 
 
-                    stbi_write_png(savePath.string, framebuffer->width, framebuffer->height, 3 /*RGB*/, textureBuffer, framebuffer->width * 3);
+                    stbi_write_png(savePath.string, framebuffer->width, framebuffer->height, 4 /*RGBA*/, textureBuffer, framebuffer->width * 4);
 
                     glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 }
@@ -704,6 +710,13 @@ void DrawWindow(WindowData* windowData) {
     float imageWidth = Min(512.f, (float) windowData->framebuffer.width);
     float imageHeight = imageWidth * ((float) windowData->framebuffer.height / (float) windowData->framebuffer.width);
 
+    float uvY = 2;
+    float uvX = uvY * imageWidth / imageHeight;
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::Image((void*)(intptr_t)checkerTexture, ImVec2(imageWidth, imageHeight), ImVec2(0, 0), ImVec2(uvX , uvY));
+
+    ImGui::SetCursorScreenPos(p);
     ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, ImVec2(imageWidth, imageHeight));
 
     if(ImGui::Button("Open shader file")) {
@@ -869,6 +882,24 @@ int main()
     }
 
     glDeleteShader(errorFragmenHandle);
+
+    // checker background pattern
+    int checkerWidth, checkerHeight, checkerChannels;
+    unsigned char* checkerData = stbi_load("img/checker.png", &checkerWidth, &checkerHeight, &checkerChannels, 3);
+
+    glGenTextures(1, &checkerTexture);
+    glBindTexture(GL_TEXTURE_2D, checkerTexture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // @TODO: handle case, when checker texture wasn't found
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, checkerWidth, checkerHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, checkerData);
+    stbi_image_free(checkerData);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     CreateNewShaderWindow(defaultShaderPath);
 
