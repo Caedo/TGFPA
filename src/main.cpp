@@ -81,6 +81,8 @@ struct WindowData {
     int framebufferDisplayHeight;
 
     int selectedPresetIndex;
+
+    bool openned;
 };
 
 unsigned int checkerTexture;
@@ -649,16 +651,24 @@ void CreateNewShaderWindow(Str8 filePath) {
     if(currentWindowCount >= MaxWindowsCount) {
         return;
     }
+
+    int firstEmptyIndex = 0;
+    for(int i = 0; i < MaxWindowsCount; i++) {
+        if(windowsData[i].openned == false) {
+            firstEmptyIndex = i;
+            break;
+        }
+    }
     
-    WindowData* newWindow = &windowsData[currentWindowCount];
+    WindowData* newWindow = &windowsData[firstEmptyIndex];
 
     Str8 fileName = GetFileNameFromPath(filePath);
     // TODO: Possible buffer overflow
     sprintf(newWindow->label, "%s##%d", fileName.string, currentWindowCount);
 
     newWindow->shader = CreateShaderFromFile(filePath);
-
     newWindow->framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
+    newWindow->openned = true;
 
     if(focusedWindow == NULL) {
         focusedWindow = newWindow;
@@ -667,8 +677,30 @@ void CreateNewShaderWindow(Str8 filePath) {
     currentWindowCount++;
 }
 
+void CloseShaderWindow(WindowData* windowData) {
+    // TODO: In theory we can cache window data and then reuse it when openning new
+    // but for now, just to be simple destroy all data
+
+    DestroyArena(&windowData->shader.shaderMemory);
+    glDeleteShader(windowData->shader.handle);
+
+    glDeleteTextures(1, &windowData->framebuffer.colorTexture);
+    glDeleteFramebuffers(1, &windowData->framebuffer.handle);
+
+    memset(windowData, 0, sizeof(WindowData));
+}
+
 void DrawWindow(WindowData* windowData) {
-    ImGui::Begin(windowData->label);
+    if(windowData->openned == false)
+        return;
+
+    ImGui::Begin(windowData->label, &windowData->openned);
+    if(windowData->openned == false) {
+        CloseShaderWindow(windowData);
+        ImGui::End();
+
+        return;
+    }
 
     if(ImGui::IsWindowFocused()) {
         focusedWindow = windowData;
@@ -944,7 +976,8 @@ int main()
             ImGui::ShowDemoWindow(&show_demo_window);
 
         for(int i = 0; i < currentWindowCount; i++) {
-            DrawToFramebuffer(&windowsData[i].framebuffer, &windowsData[i].shader);
+            if(windowsData[i].openned)
+                DrawToFramebuffer(&windowsData[i].framebuffer, &windowsData[i].shader);
         }
 
         ImGuiID dockspaceID = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
