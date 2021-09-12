@@ -650,15 +650,18 @@ void CreateNewShaderWindow(Str8 filePath) {
         return;
     }
     
+    WindowData* newWindow = &windowsData[currentWindowCount];
+
     Str8 fileName = GetFileNameFromPath(filePath);
-    memcpy(windowsData[currentWindowCount].label, fileName.string, fileName.length + 1);
+    // TODO: Possible buffer overflow
+    sprintf(newWindow->label, "%s##%d", fileName.string, currentWindowCount);
 
-    windowsData[currentWindowCount].shader = CreateShaderFromFile(filePath);
+    newWindow->shader = CreateShaderFromFile(filePath);
 
-    windowsData[currentWindowCount].framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
+    newWindow->framebuffer = CreateFramebuffer((int) TextureSizePresets[0].x, (int) TextureSizePresets[0].y);
 
     if(focusedWindow == NULL) {
-        focusedWindow = windowsData;
+        focusedWindow = newWindow;
     }
 
     currentWindowCount++;
@@ -733,6 +736,8 @@ void DrawWindow(WindowData* windowData) {
         if(ImGui::BeginTabItem("Uniforms")) {
             for(int i = 0; i < windowData->shader.uniformsCount; i++) {
                 ShaderUniformData* uniform = windowData->shader.uniforms + i;
+
+                glUseProgram(windowData->shader.handle);
 
                 if(uniform->location == -1) {
                     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
