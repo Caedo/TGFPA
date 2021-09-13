@@ -439,21 +439,22 @@ void DrawMenuBar() {
             if(ImGui::MenuItem("Open...")) {
                 Str8 path = OpenFileDialog(&temporaryArena, FileType_Shader);
                 if(path.string) {
-                    assert(focusedWindow);
+                    CreateNewShaderWindow(path);
+                    // assert(focusedWindow);
 
-                    Shader* shader = &focusedWindow->shader;
-                    UnloadShader(shader);
+                    // Shader* shader = &focusedWindow->shader;
+                    // UnloadShader(shader);
 
-                    shader->filePath.string = (char*) PushArena(&shader->shaderMemory, path.length + 1);
-                    shader->filePath.length = path.length;
+                    // shader->filePath.string = (char*) PushArena(&shader->shaderMemory, path.length + 1);
+                    // shader->filePath.length = path.length;
 
-                    memcpy(shader->filePath.string, path.string, path.length + 1);
+                    // memcpy(shader->filePath.string, path.string, path.length + 1);
 
-                    Str8 fileName = GetFileNameFromPath(path);
-                    memcpy(focusedWindow->label, fileName.string, fileName.length + 1);
+                    // Str8 fileName = GetFileNameFromPath(path);
+                    // memcpy(focusedWindow->label, fileName.string, fileName.length + 1);
 
 
-                    ReloadShader(shader);
+                    // ReloadShader(shader);
                 }
             }
 
@@ -512,7 +513,7 @@ void DrawFloat(ShaderUniformData* uniform) {
         changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength, &uniform->minRangeValue, &uniform->maxRangeValue);
     }
     else if(uniform->attributeFlags & UniformAttribFlag_Drag) {
-        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength);
+        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength, 0.005f);
     }
     else if(uniform->attributeFlags & UniformAttribFlag_Color && 
         (uniform->vectorLength == 3 || uniform->vectorLength == 4))
