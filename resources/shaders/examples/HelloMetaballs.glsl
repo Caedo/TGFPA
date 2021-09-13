@@ -1,5 +1,14 @@
 #define EPSILON 0.001
 
+COLOR()
+uniform vec3 lightColor = vec3(0.1, 0.5, 0.3);
+
+COLOR()
+uniform vec3 ballsColor = vec3(0, 0, 0.75);
+
+RANGE(0, 1)
+uniform float blend = 0.25;
+
 float sphere(vec3 p, float r) {
     return length(p) - r;
 }
@@ -18,11 +27,10 @@ float sceneSDF(vec3 point) {
     float s1 = sphere(point - s1Pos, 0.6);
     float s2 = sphere(point - s2Pos, 0.5);
     float s3 = sphere(point - s3Pos, 0.45);
-        
-    float sd = opSmoothUnion(s1, s2, 0.2);
-    sd = opSmoothUnion(sd, s3, 0.25);
-        
-                           
+
+    float sd = opSmoothUnion(s1, s2, blend);
+    sd = opSmoothUnion(sd, s3, blend);
+
     return sd;
 }
 
@@ -89,8 +97,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     vec3 hitPoint = cameraPos + dist * dir;
     float ndotl = dot(normal(hitPoint), lightDir) * 0.5 + 0.5;
         
-    vec3 col = ndotl * vec3(0.1, 0.5, 0.3) + vec3(0.0, 0.0, 0.75);
-        
+    vec3 col = ndotl * lightColor + ballsColor;
+
 
     // Output to screen
     fragColor = vec4(col,1.0);
