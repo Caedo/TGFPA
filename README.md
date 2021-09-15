@@ -12,7 +12,7 @@ Shader file have to be valid [GLSL](https://www.khronos.org/opengl/wiki/Core_Lan
 TGFPA creates specific UI controls for all uniform variables (the ones with greyish tint are stripped by compiler). What controls are used can be altered with custom attributes: `DRAG()`, `Range(min, max)`, `Color()` (only for vec3 and vec4).
 
 ### Libs
-TGFPA uses custom, #include-like system for adding libraries to shaders. Library file have to be inside `shader/lib` directory. To include library use `LIB("<library-name>")`, keep in mind that it literally pastes library file on top of shader file, so all name collisions can occur. 
+TGFPA uses custom, #include-like system for adding libraries to shaders. Library file have to be inside `shader/lib` directory. To include library use `LIB(<library-name>)`, keep in mind that it literally pastes library file on top of shader file, so all name collisions can occur. 
 
 Build
 =====
