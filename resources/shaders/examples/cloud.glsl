@@ -1,6 +1,6 @@
 // Test cloud-like texture, will be rewriten later
 
-LIB("noise2D")
+LIB(noise2D)
 
 RANGE(1, 5)
 uniform int octaves = 2;
@@ -13,7 +13,7 @@ uniform float scale = 4;
 RANGE(0, 1)
 uniform float smoothMin = 0.3f;
 RANGE(0, 1)
-uniform float smoothMax = 1f;
+uniform float smoothMax = 1;
 
 float FBM(vec2 point) {
     float value = 0;

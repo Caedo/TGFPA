@@ -1,14 +1,14 @@
 
-LIB("cellular2D")
-LIB("cellular3D")
-LIB("classicnoise2D")
-LIB("classicnoise3D")
-LIB("classicnoise4D")
-LIB("noise2D")
-LIB("noise3D")
-LIB("noise3Dgrad")
-LIB("noise4D")
-LIB("psrdnoise2D")
+LIB(cellular2D)
+LIB(cellular3D)
+LIB(classicnoise2D)
+LIB(classicnoise3D)
+LIB(classicnoise4D)
+LIB(noise2D)
+LIB(noise3D)
+LIB(noise3Dgrad)
+LIB(noise4D)
+LIB(psrdnoise2D)
 
 uniform int    uniform_int;
 uniform uint   uniform_uint;

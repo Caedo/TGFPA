@@ -1,4 +1,4 @@
-LIB("noise2D")
+LIB(noise2D)
 
 RANGE(1, 5)
 uniform int octaves = 3;

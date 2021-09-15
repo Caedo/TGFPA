@@ -214,7 +214,7 @@ ShaderLib* GetShaderLibs(char* shaderSource, MemoryArena* arena, int* libsCount)
         if(token.type == Token_Identifier) {
             if(IsTokenEqual(token, "LIB")) {
                 RequireToken(&tokenizer, Token_OpenBracket);
-                Token nameToken = RequireToken(&tokenizer, Token_String);
+                Token nameToken = RequireToken(&tokenizer, Token_Identifier);
                 RequireToken(&tokenizer, Token_CloseBracket);
 
                 if(tokenizer.parsing == false)
@@ -222,8 +222,8 @@ ShaderLib* GetShaderLibs(char* shaderSource, MemoryArena* arena, int* libsCount)
 
                 ShaderLib* lib = (ShaderLib*) PushArena(arena, sizeof(ShaderLib));
 
-                lib->name.string = nameToken.text + 1;
-                lib->name.length = nameToken.length - 2;
+                lib->name.string = nameToken.text;
+                lib->name.length = nameToken.length;
 
                 (*libsCount)++;
             }

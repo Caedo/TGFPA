@@ -3,7 +3,7 @@
 if NOT "%Platform%" == "X64" IF NOT "%Platform%" == "x64" (call vcvarsall x64)
 
 set exe_name=TGFPA
-set compile_flags= -nologo /Zi /FC /I ../include/ /W4
+set compile_flags= -nologo /FC /I ../include/ /W4
 set linker_flags= glfw3dll.lib gdi32.lib user32.lib kernel32.lib opengl32.lib Comdlg32.lib Shell32.lib
 set linker_path="../lib/"
 
@@ -14,7 +14,7 @@ if "%1" == "release" (
     set compile_flags=%compile_flags% /O2
     set linker_flags=%linker_flags% /SUBSYSTEM:windows /ENTRY:mainCRTStartup
 ) else (
-    set compile_flags=%compile_flags% /DDEBUG /fsanitize=address
+    set compile_flags=%compile_flags%  /Zi /DDEBUG /fsanitize=address
 )
 
 if not exist build mkdir build
