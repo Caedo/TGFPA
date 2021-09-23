@@ -49,6 +49,7 @@ enum UniformScalarType {
     UniformType_Float,
     UniformType_Double,
     UniformType_Matrix,
+    UniformType_Texture,
     UniformType_Count,
 };
 
@@ -76,12 +77,15 @@ struct ShaderUniformData {
     float minRangeValue;
     float maxRangeValue;
 
+    int textureUnit;
+
     UniformScalarType type;
     union {
         float    floatValue[4];
         double   doubleValue[4];
         int32_t  intValue[4];
         uint32_t uintValue[4];
+        GLuint texture;
     };
 };
 

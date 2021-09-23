@@ -407,6 +407,14 @@ void DrawToFramebuffer(Framebuffer* framebuffer, Shader* shader) {
     glUniform1f(shader->timeDeltaLocation, (float) deltaTime);
     glUniform1i(shader->frameLocation, frame);
 
+    for(int i = 0; i < shader->uniformsCount; i++) {
+        ShaderUniformData* uniform = shader->uniforms + i;
+        if(uniform->type == UniformType_Texture) {
+            glActiveTexture(GL_TEXTURE0 + uniform->textureUnit);
+            glBindTexture(GL_TEXTURE_2D, uniform->texture);
+        }
+    }
+
     glViewport(0, 0, framebuffer->width, framebuffer->height);
     glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -416,6 +424,38 @@ void DrawToFramebuffer(Framebuffer* framebuffer, Shader* shader) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+
+GLuint LoadTexture(Str8 path) {
+    int width, height, channels;
+    unsigned char* texData = stbi_load(path.string, &width, &height, &channels, 0);
+
+    assert(channels == 1 || channels == 2 || channels == 3 || channels == 4);
+
+    GLenum format = 0;
+    switch(channels) {
+        case 1: format = GL_RED;  break;
+        case 2: format = GL_RG;   break;
+        case 3: format = GL_RGB;  break;
+        case 4: format = GL_RGBA; break;
+    }
+
+    GLuint texture = 0;
+
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, texData);
+    stbi_image_free(texData);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return texture;
+}
 
 void DrawMenuBar() {
     if(ImGui::BeginMainMenuBar()) {
@@ -648,6 +688,24 @@ void DrawBool(ShaderUniformData* uniform) {
     }
 }
 
+void DrawTexture(ShaderUniformData* uniform) {
+    assert(uniform->type == UniformType_Texture);
+
+    bool pressed = ImGui::ImageButton((void*)(intptr_t)uniform->texture, ImVec2(35, 35));
+    ImGui::SameLine();
+    ImGui::TextUnformatted(uniform->name);
+
+    if(pressed) {
+        Str8 path = OpenFileDialog(&temporaryArena, FileType_Image);
+        if(path.string) {
+            // fprintf(stderr, "%s", path.string);
+
+            uniform->texture = LoadTexture(path);
+            glUniform1i(uniform->location, uniform->textureUnit);
+        }
+    }
+}
+
 void CreateNewShaderWindow(Str8 filePath) {
     if(currentWindowCount >= MaxWindowsCount) {
         return;
@@ -777,11 +835,12 @@ void DrawWindow(WindowData* windowData) {
                 }
 
                 switch(uniform->type) {
-                    case UniformType_Bool:   DrawBool(uniform);   break;
-                    case UniformType_UInt:   DrawUInt(uniform);   break;
-                    case UniformType_Int:    DrawInt(uniform);    break;
-                    case UniformType_Float:  DrawFloat(uniform);  break;
-                    case UniformType_Double: DrawDouble(uniform); break;
+                    case UniformType_Bool:    DrawBool(uniform);   break;
+                    case UniformType_UInt:    DrawUInt(uniform);   break;
+                    case UniformType_Int:     DrawInt(uniform);    break;
+                    case UniformType_Float:   DrawFloat(uniform);  break;
+                    case UniformType_Double:  DrawDouble(uniform); break;
+                    case UniformType_Texture: DrawTexture(uniform); break;
                 }
 
                 if(uniform->location == -1) {
@@ -922,22 +981,24 @@ int main()
     glDeleteShader(errorFragmenHandle);
 
     // checker background pattern
-    int checkerWidth, checkerHeight, checkerChannels;
-    unsigned char* checkerData = stbi_load("img/checker.png", &checkerWidth, &checkerHeight, &checkerChannels, 3);
+    // int checkerWidth, checkerHeight, checkerChannels;
+    // unsigned char* checkerData = stbi_load("img/checker.png", &checkerWidth, &checkerHeight, &checkerChannels, 3);
 
-    glGenTextures(1, &checkerTexture);
-    glBindTexture(GL_TEXTURE_2D, checkerTexture);
+    // glGenTextures(1, &checkerTexture);
+    // glBindTexture(GL_TEXTURE_2D, checkerTexture);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    // @TODO: handle case, when checker texture wasn't found
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, checkerWidth, checkerHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, checkerData);
-    stbi_image_free(checkerData);
+    // // @TODO: handle case, when checker texture wasn't found
+    // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, checkerWidth, checkerHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, checkerData);
+    // stbi_image_free(checkerData);
 
-    glBindTexture(GL_TEXTURE_2D, 0);
+    // glBindTexture(GL_TEXTURE_2D, 0);
+
+    checkerTexture = LoadTexture(Str8Lit("img/checker.png"));
 
     CreateNewShaderWindow(defaultShaderPath);
 

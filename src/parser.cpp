@@ -273,6 +273,9 @@ void GetTypeData(Token token, UniformScalarType* type, int* vectorLength) {
             default: fprintf(stderr, "SyntaxError..."); break; // TODO: Better errors
         }
     }
+    else if(IsTokenEqual(token, "sampler2D")) {
+        *type = UniformType_Texture;
+    }
     else if(TokenContains(token, Str8Lit("mat"))) {
         *type = UniformType_Matrix;
     }
@@ -332,6 +335,8 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
     float minRangeValue = 0;
     float maxRangeValue = 0;
 
+    int currentTextureUnit = 0;
+
     while(tokenizer.parsing) {
         Token token = GetNextToken(&tokenizer);
 
@@ -350,6 +355,11 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
                 uniform->name[nameToken.length] = 0;
 
                 GetTypeData(typeToken, &uniform->type, &uniform->vectorLength);
+
+                if(uniform->type == UniformType_Texture) {
+                    uniform->textureUnit = currentTextureUnit;
+                    currentTextureUnit++;
+                }
 
                 Token nextToken = PeekNextToken(&tokenizer);
                 if(nextToken.type == Token_OpenSquareBracket) {
