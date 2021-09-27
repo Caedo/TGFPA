@@ -30,18 +30,20 @@
 
 #include "memory_management.h"
 #include "parser.h"
+#include "platform.h"
 
 #include "platform_win32.cpp"
 #include "memory_management.cpp"
 #include "parser.cpp"
 
+Platform platform;
 MemoryArena temporaryArena;
 
 struct Shader {
     MemoryArena shaderMemory;
 
     Str8 source;
-    Str8 filePath;
+    FileData fileData;
 
     Str8 errors;
 
@@ -58,9 +60,6 @@ struct Shader {
 
     int libsCount;
     ShaderLib* libs;
-
-    // @Win32
-    FILETIME lastWriteTime;
 };
 
 struct Framebuffer {
@@ -295,9 +294,9 @@ Str8 LoadShaderSource(Str8 filePath, MemoryArena* arena) {
 }
 
 void CreateShader(Shader* shader) {
-    shader->lastWriteTime = GetLastWriteTime(shader->filePath.string);
+    platform.UpdateLastWriteTime(&shader->fileData);
 
-    shader->source   = LoadShaderSource(shader->filePath, &shader->shaderMemory);
+    shader->source   = LoadShaderSource(shader->fileData.path, &shader->shaderMemory);
     shader->uniforms = GetShaderUniforms(shader->source.string, &shader->shaderMemory, &shader->uniformsCount);
     shader->libs     = GetShaderLibs(shader->source.string, &shader->shaderMemory, &shader->libsCount);
 
@@ -322,11 +321,11 @@ Shader CreateShaderFromFile(Str8 filePath) {
     Shader ret = {};
     ret.shaderMemory = CreateArena();
 
-    ret.filePath.length = filePath.length;
-    ret.filePath.string = (char*) PushArena(&ret.shaderMemory, ret.filePath.length + 1);
-    memcpy(ret.filePath.string, filePath.string, ret.filePath.length + 1);
+    ret.fileData.path.length = filePath.length;
+    ret.fileData.path.string = (char*) PushArena(&ret.shaderMemory, filePath.length + 1);
+    memcpy(ret.fileData.path.string, filePath.string, filePath.length + 1);
 
-    ret.lastWriteTime = GetLastWriteTime(filePath.string);
+    platform.UpdateLastWriteTime(&ret.fileData);
 
     CreateShader(&ret);
 
@@ -336,19 +335,26 @@ Shader CreateShaderFromFile(Str8 filePath) {
 void UnloadShader(Shader* shader) {
     glDeleteShader(shader->handle);
 
+    for(int i = 0; i < shader->uniformsCount; i++) {
+        ShaderUniformData* uniform = shader->uniforms + i;
+        if(uniform->type == UniformType_Texture) {
+            glDeleteTextures(1, &uniform->texture);
+        }
+    }
+
     ClearArena(&shader->shaderMemory);
 
     shader->isValid = false;
 }
 
 void ReloadShader(Shader* shader) {
-    uint64_t pathLen = shader->filePath.length;
+    uint64_t pathLen = shader->fileData.path.length;
     char* temp = (char*) PushArena(&temporaryArena, pathLen + 1);
-    memcpy(temp, shader->filePath.string, pathLen + 1);
+    memcpy(temp, shader->fileData.path.string, pathLen + 1);
 
     ClearArena(&shader->shaderMemory);
-    shader->filePath.string = (char*) PushArena(&shader->shaderMemory, pathLen + 1);
-    memcpy(shader->filePath.string, temp, pathLen + 1);
+    shader->fileData.path.string = (char*) PushArena(&shader->shaderMemory, pathLen + 1);
+    memcpy(shader->fileData.path.string, temp, pathLen + 1);
 
     glDeleteShader(shader->handle);
     
@@ -463,7 +469,7 @@ void DrawMenuBar() {
         if(ImGui::BeginMenu("File")) {
             if(ImGui::MenuItem("New...")) {
 
-                Str8 savePath = SaveFileDialog(&temporaryArena, FileType_Shader);
+                Str8 savePath = platform.SaveFileDialog(&temporaryArena, FileType_Shader);
                 if(savePath.string) {
                     FILE* file = fopen(savePath.string, "wb");
                     if(file) {
@@ -477,7 +483,7 @@ void DrawMenuBar() {
             }
 
             if(ImGui::MenuItem("Open...")) {
-                Str8 path = OpenFileDialog(&temporaryArena, FileType_Shader);
+                Str8 path = platform.OpenFileDialog(&temporaryArena, FileType_Shader);
                 if(path.string) {
                     CreateNewShaderWindow(path);
                     // assert(focusedWindow);
@@ -499,7 +505,7 @@ void DrawMenuBar() {
             }
 
             if(ImGui::MenuItem("Save...")) {
-                Str8 savePath = SaveFileDialog(&temporaryArena, FileType_Image);
+                Str8 savePath = platform.SaveFileDialog(&temporaryArena, FileType_Image);
                 if(savePath.string) {
                     Framebuffer* framebuffer = &focusedWindow->framebuffer;
 
@@ -688,7 +694,7 @@ void DrawBool(ShaderUniformData* uniform) {
     }
 }
 
-void DrawTexture(ShaderUniformData* uniform) {
+void DrawTextureControl(ShaderUniformData* uniform) {
     assert(uniform->type == UniformType_Texture);
 
     bool pressed = ImGui::ImageButton((void*)(intptr_t)uniform->texture, ImVec2(35, 35));
@@ -696,7 +702,7 @@ void DrawTexture(ShaderUniformData* uniform) {
     ImGui::TextUnformatted(uniform->name);
 
     if(pressed) {
-        Str8 path = OpenFileDialog(&temporaryArena, FileType_Image);
+        Str8 path = platform.OpenFileDialog(&temporaryArena, FileType_Image);
         if(path.string) {
             // fprintf(stderr, "%s", path.string);
 
@@ -814,12 +820,13 @@ void DrawWindow(WindowData* windowData) {
     ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, ImVec2(imageWidth, imageHeight));
 
     if(ImGui::Button("Open shader file")) {
-        ShellExecute(0, "open", windowData->shader.filePath.string, 0, 0 , SW_SHOW);
+        ShellExecute(0, "open", windowData->shader.fileData.path.string, 0, 0 , SW_SHOW);
     }
 
     ImGui::EndChild();
 
     ImGui::SameLine();
+
 
     ImGui::BeginChild("Right", ImVec2(0, 0), true);
     if(ImGui::BeginTabBar("RightTabBar")) {
@@ -840,7 +847,7 @@ void DrawWindow(WindowData* windowData) {
                     case UniformType_Int:     DrawInt(uniform);    break;
                     case UniformType_Float:   DrawFloat(uniform);  break;
                     case UniformType_Double:  DrawDouble(uniform); break;
-                    case UniformType_Texture: DrawTexture(uniform); break;
+                    case UniformType_Texture: DrawTextureControl(uniform); break;
                 }
 
                 if(uniform->location == -1) {
@@ -890,6 +897,7 @@ int main()
     }
 
     temporaryArena = CreateArena();
+    platform = Win32_Initialize();
 
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
@@ -1023,11 +1031,9 @@ int main()
         ImGui::NewFrame();
 
         for(int i = 0; i < currentWindowCount; i++) {
-            // @Win32 Call
-            FILETIME currentModifyTime = GetLastWriteTime(windowsData[i].shader.filePath.string);
-            if(CompareFileTime(&currentModifyTime, &windowsData[i].shader.lastWriteTime) != 0) {
+            if(platform.FileHasChanged(windowsData[i].shader.fileData)) {
                 ReloadShader(&windowsData[i].shader);
-                printf("RELOADING SHADER on path: %s \n", windowsData[i].shader.filePath.string);
+                printf("RELOADING SHADER on path: %s \n", windowsData[i].shader.fileData.path.string);
             }
         }
         

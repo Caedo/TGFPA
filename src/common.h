@@ -15,6 +15,12 @@ enum FileType {
     FileType_Image,
 };
 
+struct FileData {
+    Str8 path;
+    //@Win32
+    FILETIME lastWriteTime;
+};
+
 Str8 GetFileNameFromPath(Str8 path) {
 
     char* at = path.string + path.length - 1;

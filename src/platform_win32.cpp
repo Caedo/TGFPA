@@ -1,10 +1,10 @@
 #include <windows.h>
 
-FILETIME GetLastWriteTime(char* filename) {
+FILETIME Win32_GetLastWriteTime(Str8 filePath) {
     FILETIME ret = {};
 
     WIN32_FIND_DATA findData;
-    HANDLE findHandle = FindFirstFile(filename, &findData);
+    HANDLE findHandle = FindFirstFile(filePath.string, &findData);
     if(findHandle != INVALID_HANDLE_VALUE) {
         FindClose(findHandle);
         ret = findData.ftLastWriteTime;
@@ -13,7 +13,16 @@ FILETIME GetLastWriteTime(char* filename) {
     return ret;
 }
 
-void FillOFNStruct(OPENFILENAME* ofn, FileType fileType) {
+void Win32_UpdateLastWriteTime(FileData* fileData) {
+    fileData->lastWriteTime = Win32_GetLastWriteTime(fileData->path);
+}
+
+bool Win32_FileHasChanged(FileData fileData) {
+    FILETIME currentModifyTime = Win32_GetLastWriteTime(fileData.path);
+    return CompareFileTime(&currentModifyTime, &fileData.lastWriteTime) != 0;
+}
+
+void Win32_FillOFNStruct(OPENFILENAME* ofn, FileType fileType) {
     switch(fileType) {
         case FileType_Shader: {
             ofn->lpstrFilter = "GLSL file (.glsl)\0*.glsl\0";
@@ -28,7 +37,7 @@ void FillOFNStruct(OPENFILENAME* ofn, FileType fileType) {
     }
 }
 
-Str8 OpenFileDialog(MemoryArena* arena, FileType fileType) {
+Str8 Win32_OpenFileDialog(MemoryArena* arena, FileType fileType) {
     assert(arena);
     assert(arena->baseAddres);
     
@@ -43,7 +52,7 @@ Str8 OpenFileDialog(MemoryArena* arena, FileType fileType) {
     // Make sure, that path is an empty string
     ofn.lpstrFile[0] = '\0';
 
-    FillOFNStruct(&ofn, fileType);
+    Win32_FillOFNStruct(&ofn, fileType);
 
     // if(fileName != nullptr) {
     //     ofn.lpstrFileTitle = (LPSTR) fileName->str;
@@ -62,7 +71,7 @@ Str8 OpenFileDialog(MemoryArena* arena, FileType fileType) {
     return {};
 }
 
-Str8 SaveFileDialog(MemoryArena* arena, FileType fileType) {
+Str8 Win32_SaveFileDialog(MemoryArena* arena, FileType fileType) {
     assert(arena);
     assert(arena->baseAddres);
     
@@ -78,7 +87,7 @@ Str8 SaveFileDialog(MemoryArena* arena, FileType fileType) {
     
     ofn.nMaxFile = MAX_PATH;
 
-    FillOFNStruct(&ofn, fileType);
+    Win32_FillOFNStruct(&ofn, fileType);
 
     ofn.lpstrInitialDir = NULL;
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT;
@@ -90,4 +99,16 @@ Str8 SaveFileDialog(MemoryArena* arena, FileType fileType) {
     }
     
     return {};
+}
+
+Platform Win32_Initialize() {
+    Platform platform = {};
+
+    platform.OpenFileDialog = Win32_OpenFileDialog;
+    platform.SaveFileDialog = Win32_SaveFileDialog;
+
+    platform.FileHasChanged = Win32_FileHasChanged;
+    platform.UpdateLastWriteTime = Win32_UpdateLastWriteTime;
+
+    return platform;
 }
