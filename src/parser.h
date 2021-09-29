@@ -60,6 +60,14 @@ enum UniformAttribFlag {
     UniformAttribFlag_Drag  = 4,
 };
 
+union Value {
+    float    floatValue[4];
+    // double   doubleValue[4];
+    int32_t  intValue[4];
+    uint32_t uintValue[4];
+    GLuint texture;
+};
+
 struct ShaderUniformData {
     char name[128];
     GLint location;
@@ -79,14 +87,9 @@ struct ShaderUniformData {
 
     int textureUnit;
 
+    bool isDirty;
     UniformScalarType type;
-    union {
-        float    floatValue[4];
-        double   doubleValue[4];
-        int32_t  intValue[4];
-        uint32_t uintValue[4];
-        GLuint texture;
-    };
+    Value value;
 };
 
 #endif //PARSER_H

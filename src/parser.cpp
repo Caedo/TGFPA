@@ -399,7 +399,7 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
                             Token valueToken = GetNextToken(&tokenizer);
                             if(valueToken.type == Token_Number) {
                                 // TODO: will not work for doubles
-                                GetNumber(valueToken, (void*) &(uniform->floatValue[i]), defaultValueType);
+                                GetNumber(valueToken, (void*) &(uniform->value.floatValue[i]), defaultValueType);
 
                             }
                             else {
@@ -421,7 +421,7 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
                         // parse default types for scalars
 
                         Token valueToken = GetNextToken(&tokenizer);
-                        GetNumber(valueToken, (void*) uniform->floatValue, uniform->type);
+                        GetNumber(valueToken, (void*) &uniform->value, uniform->type);
                     }
                 }
 

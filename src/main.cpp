@@ -338,7 +338,7 @@ void UnloadShader(Shader* shader) {
     for(int i = 0; i < shader->uniformsCount; i++) {
         ShaderUniformData* uniform = shader->uniforms + i;
         if(uniform->type == UniformType_Texture) {
-            glDeleteTextures(1, &uniform->texture);
+            glDeleteTextures(1, &uniform->value.texture);
         }
     }
 
@@ -347,10 +347,107 @@ void UnloadShader(Shader* shader) {
     shader->isValid = false;
 }
 
+void TryConvertUniformValues(ShaderUniformData* from, ShaderUniformData* to) {
+    assert(strcmp(from->name, to->name) == 0);
+
+    if(from->type == to->type) {
+        to->value = from->value;
+        to->isDirty = true;
+        return;
+    }
+
+    switch(to->type) {
+        case UniformType_Int: {
+            switch(from->type) {
+                case UniformType_UInt : {
+                    to->value.intValue[0] = (int32_t)from->value.uintValue[0];
+                    to->value.intValue[1] = (int32_t)from->value.uintValue[1];
+                    to->value.intValue[2] = (int32_t)from->value.uintValue[2];
+                    to->value.intValue[3] = (int32_t)from->value.uintValue[3];
+
+                    to->isDirty = true;
+                    break;
+                }
+
+                case UniformType_Float : {
+                    to->value.intValue[0] = (int32_t)from->value.floatValue[0];
+                    to->value.intValue[1] = (int32_t)from->value.floatValue[1];
+                    to->value.intValue[2] = (int32_t)from->value.floatValue[2];
+                    to->value.intValue[3] = (int32_t)from->value.floatValue[3];
+
+                    to->isDirty = true;
+                    break;
+                }
+            }
+
+            break;
+        }
+
+        case UniformType_UInt: {
+            switch(from->type) {
+                case UniformType_Int : {
+                    to->value.uintValue[0] = (uint32_t) Max(from->value.intValue[0], 0);
+                    to->value.uintValue[1] = (uint32_t) Max(from->value.intValue[1], 0);
+                    to->value.uintValue[2] = (uint32_t) Max(from->value.intValue[2], 0);
+                    to->value.uintValue[3] = (uint32_t) Max(from->value.intValue[3], 0);
+
+                    to->isDirty = true;
+                    break;
+                }
+
+                case UniformType_Float : {
+                    to->value.uintValue[0] = (uint32_t) Max(from->value.floatValue[0], 0.0f);
+                    to->value.uintValue[1] = (uint32_t) Max(from->value.floatValue[1], 0.0f);
+                    to->value.uintValue[2] = (uint32_t) Max(from->value.floatValue[2], 0.0f);
+                    to->value.uintValue[3] = (uint32_t) Max(from->value.floatValue[3], 0.0f);
+
+                    to->isDirty = true;
+                    break;
+                }
+            }
+
+            break;
+        }
+
+        case UniformType_Float: {
+            switch(from->type) {
+                case UniformType_Int : {
+                    to->value.floatValue[0] = (float)from->value.intValue[0];
+                    to->value.floatValue[1] = (float)from->value.intValue[1];
+                    to->value.floatValue[2] = (float)from->value.intValue[2];
+                    to->value.floatValue[3] = (float)from->value.intValue[3];
+
+                    to->isDirty = true;
+                    break;
+                }
+
+                case UniformType_UInt : {
+                    to->value.floatValue[0] = (float)from->value.uintValue[0];
+                    to->value.floatValue[1] = (float)from->value.uintValue[1];
+                    to->value.floatValue[2] = (float)from->value.uintValue[2];
+                    to->value.floatValue[3] = (float)from->value.uintValue[3];
+
+                    to->isDirty = true;
+                    break;
+                }
+            }
+
+            break;
+        }
+    }
+}
+
 void ReloadShader(Shader* shader) {
+    // clone needed data
     uint64_t pathLen = shader->fileData.path.length;
     char* temp = (char*) PushArena(&temporaryArena, pathLen + 1);
     memcpy(temp, shader->fileData.path.string, pathLen + 1);
+
+    int uniformsCount = shader->uniformsCount;
+    ShaderUniformData* uniforms = (ShaderUniformData*) PushArena(&temporaryArena, sizeof(ShaderUniformData) * uniformsCount);
+    // uniform data contains no pointers so making shallow copy here is safe.
+    // If this changes, deep copy will be needed (probably)
+    memcpy(uniforms, shader->uniforms, sizeof(ShaderUniformData) * uniformsCount);
 
     ClearArena(&shader->shaderMemory);
     shader->fileData.path.string = (char*) PushArena(&shader->shaderMemory, pathLen + 1);
@@ -359,6 +456,14 @@ void ReloadShader(Shader* shader) {
     glDeleteShader(shader->handle);
     
     CreateShader(shader);
+
+    for(int i = 0; i < uniformsCount; i++) {
+        for(int j = 0; j < shader->uniformsCount; j++) {
+            if(strcmp(uniforms[i].name, shader->uniforms[j].name) == 0) {
+                TryConvertUniformValues(&uniforms[i], &shader->uniforms[j]);
+            }
+        }
+    }
 }
 
 Framebuffer CreateFramebuffer(int width, int height) {
@@ -417,7 +522,7 @@ void DrawToFramebuffer(Framebuffer* framebuffer, Shader* shader) {
         ShaderUniformData* uniform = shader->uniforms + i;
         if(uniform->type == UniformType_Texture) {
             glActiveTexture(GL_TEXTURE0 + uniform->textureUnit);
-            glBindTexture(GL_TEXTURE_2D, uniform->texture);
+            glBindTexture(GL_TEXTURE_2D, uniform->value.texture);
         }
     }
 
@@ -462,6 +567,7 @@ GLuint LoadTexture(Str8 path) {
 
     return texture;
 }
+
 
 void DrawMenuBar() {
     if(ImGui::BeginMainMenuBar()) {
@@ -556,35 +662,37 @@ void DrawFloat(ShaderUniformData* uniform) {
 
     bool changed = false;
     if(uniform->attributeFlags & UniformAttribFlag_Range) {
-        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength, &uniform->minRangeValue, &uniform->maxRangeValue);
+        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_Float, &uniform->value, uniform->vectorLength, &uniform->minRangeValue, &uniform->maxRangeValue);
     }
     else if(uniform->attributeFlags & UniformAttribFlag_Drag) {
-        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength, 0.005f);
+        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_Float, &uniform->value, uniform->vectorLength, 0.005f);
     }
     else if(uniform->attributeFlags & UniformAttribFlag_Color && 
         (uniform->vectorLength == 3 || uniform->vectorLength == 4))
     {
         if(uniform->vectorLength == 3) {
-            changed = ImGui::ColorEdit3(uniform->name, uniform->floatValue);
+            changed = ImGui::ColorEdit3(uniform->name, uniform->value.floatValue);
         }
         else {
-            changed = ImGui::ColorEdit4(uniform->name, uniform->floatValue);
+            changed = ImGui::ColorEdit4(uniform->name, uniform->value.floatValue);
         }
     }
     else {
-        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_Float, uniform->floatValue, uniform->vectorLength);
+        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_Float, &uniform->value, uniform->vectorLength);
     }
 
-    if(changed) {
+    uniform->isDirty = uniform->isDirty || changed;
+    if(uniform->isDirty) {
         switch(uniform->vectorLength) {
-            case 1: glUniform1fv(uniform->location, 1, uniform->floatValue); break;
-            case 2: glUniform2fv(uniform->location, 1, uniform->floatValue); break;
-            case 3: glUniform3fv(uniform->location, 1, uniform->floatValue); break;
-            case 4: glUniform4fv(uniform->location, 1, uniform->floatValue); break;
+            case 1: glUniform1fv(uniform->location, 1, uniform->value.floatValue); break;
+            case 2: glUniform2fv(uniform->location, 1, uniform->value.floatValue); break;
+            case 3: glUniform3fv(uniform->location, 1, uniform->value.floatValue); break;
+            case 4: glUniform4fv(uniform->location, 1, uniform->value.floatValue); break;
         }
     }
 }
 
+#if 0
 void DrawDouble(ShaderUniformData* uniform) {
     assert(uniform->type == UniformType_Double);
 
@@ -612,6 +720,7 @@ void DrawDouble(ShaderUniformData* uniform) {
         }
     }
 }
+#endif
 
 void DrawInt(ShaderUniformData* uniform) {
     assert(uniform->type == UniformType_Int);
@@ -621,21 +730,22 @@ void DrawInt(ShaderUniformData* uniform) {
         int min = (int) uniform->minRangeValue;
         int max = (int) uniform->maxRangeValue;
 
-        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength, &min, &max);
+        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_S32, &uniform->value, uniform->vectorLength, &min, &max);
     }
     else if(uniform->attributeFlags & UniformAttribFlag_Drag) {
-        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength);
+        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_S32, &uniform->value, uniform->vectorLength);
     }
     else {
-        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_S32, &uniform->intValue, uniform->vectorLength);
+        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_S32, &uniform->value, uniform->vectorLength);
     }
 
-    if(changed) {
+    uniform->isDirty = uniform->isDirty || changed;
+    if(uniform->isDirty) {
         switch(uniform->vectorLength) {
-            case 1: glUniform1iv(uniform->location, 1, uniform->intValue); break;
-            case 2: glUniform2iv(uniform->location, 1, uniform->intValue); break;
-            case 3: glUniform3iv(uniform->location, 1, uniform->intValue); break;
-            case 4: glUniform4iv(uniform->location, 1, uniform->intValue); break;
+            case 1: glUniform1iv(uniform->location, 1, uniform->value.intValue); break;
+            case 2: glUniform2iv(uniform->location, 1, uniform->value.intValue); break;
+            case 3: glUniform3iv(uniform->location, 1, uniform->value.intValue); break;
+            case 4: glUniform4iv(uniform->location, 1, uniform->value.intValue); break;
         }
     }
 }
@@ -648,21 +758,22 @@ void DrawUInt(ShaderUniformData* uniform) {
         uint32_t min = (uint32_t) Max(0.f, uniform->minRangeValue);
         uint32_t max = (uint32_t) Max(0.f, uniform->maxRangeValue);
 
-        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_U32, &uniform->uintValue, uniform->vectorLength, &min, &max);
+        changed = ImGui::SliderScalarN(uniform->name, ImGuiDataType_U32, &uniform->value, uniform->vectorLength, &min, &max);
     }
-    if(uniform->attributeFlags & UniformAttribFlag_Drag) {
-        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_U32, &uniform->uintValue, uniform->vectorLength);
+    else if(uniform->attributeFlags & UniformAttribFlag_Drag) {
+        changed = ImGui::DragScalarN(uniform->name, ImGuiDataType_U32, &uniform->value, uniform->vectorLength);
     }
     else {
-        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_U32, &uniform->uintValue, uniform->vectorLength);
+        changed = ImGui::InputScalarN(uniform->name, ImGuiDataType_U32, &uniform->value, uniform->vectorLength);
     }
 
-    if(changed) {
+    uniform->isDirty = uniform->isDirty || changed;
+    if(uniform->isDirty) {
         switch(uniform->vectorLength) {
-            case 1: glUniform1uiv(uniform->location, 1, uniform->uintValue); break;
-            case 2: glUniform2uiv(uniform->location, 1, uniform->uintValue); break;
-            case 3: glUniform3uiv(uniform->location, 1, uniform->uintValue); break;
-            case 4: glUniform4uiv(uniform->location, 1, uniform->uintValue); break;
+            case 1: glUniform1uiv(uniform->location, 1, uniform->value.uintValue); break;
+            case 2: glUniform2uiv(uniform->location, 1, uniform->value.uintValue); break;
+            case 3: glUniform3uiv(uniform->location, 1, uniform->value.uintValue); break;
+            case 4: glUniform4uiv(uniform->location, 1, uniform->value.uintValue); break;
         }
     }
 }
@@ -672,9 +783,9 @@ void DrawBool(ShaderUniformData* uniform) {
 
     bool changed = false;
     for(int i = 0; i < uniform->vectorLength; i++) {
-        ImGui::PushID((void*) (uniform->intValue + i));
+        ImGui::PushID((void*) (uniform->value.intValue + i));
 
-        bool c = ImGui::Checkbox("", (bool*) (uniform->intValue + i));
+        bool c = ImGui::Checkbox("", (bool*) (uniform->value.intValue + i));
         changed = changed || c;
 
         ImGui::PopID();
@@ -684,12 +795,13 @@ void DrawBool(ShaderUniformData* uniform) {
 
     ImGui::TextUnformatted(uniform->name);
 
-    if(changed) {
+    uniform->isDirty = uniform->isDirty || changed;
+    if(uniform->isDirty) {
         switch(uniform->vectorLength) {
-            case 1: glUniform1iv(uniform->location, 1, uniform->intValue); break;
-            case 2: glUniform2iv(uniform->location, 1, uniform->intValue); break;
-            case 3: glUniform3iv(uniform->location, 1, uniform->intValue); break;
-            case 4: glUniform4iv(uniform->location, 1, uniform->intValue); break;
+            case 1: glUniform1iv(uniform->location, 1, uniform->value.intValue); break;
+            case 2: glUniform2iv(uniform->location, 1, uniform->value.intValue); break;
+            case 3: glUniform3iv(uniform->location, 1, uniform->value.intValue); break;
+            case 4: glUniform4iv(uniform->location, 1, uniform->value.intValue); break;
         }
     }
 }
@@ -697,7 +809,7 @@ void DrawBool(ShaderUniformData* uniform) {
 void DrawTextureControl(ShaderUniformData* uniform) {
     assert(uniform->type == UniformType_Texture);
 
-    bool pressed = ImGui::ImageButton((void*)(intptr_t)uniform->texture, ImVec2(35, 35));
+    bool pressed = ImGui::ImageButton((void*)(intptr_t)uniform->value.texture, ImVec2(35, 35));
     ImGui::SameLine();
     ImGui::TextUnformatted(uniform->name);
 
@@ -706,7 +818,7 @@ void DrawTextureControl(ShaderUniformData* uniform) {
         if(path.string) {
             // fprintf(stderr, "%s", path.string);
 
-            uniform->texture = LoadTexture(path);
+            uniform->value.texture = LoadTexture(path);
             glUniform1i(uniform->location, uniform->textureUnit);
         }
     }
@@ -846,7 +958,7 @@ void DrawWindow(WindowData* windowData) {
                     case UniformType_UInt:    DrawUInt(uniform);   break;
                     case UniformType_Int:     DrawInt(uniform);    break;
                     case UniformType_Float:   DrawFloat(uniform);  break;
-                    case UniformType_Double:  DrawDouble(uniform); break;
+                    // case UniformType_Double:  DrawDouble(uniform); break;
                     case UniformType_Texture: DrawTextureControl(uniform); break;
                 }
 
