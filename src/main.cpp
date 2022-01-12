@@ -177,10 +177,18 @@ char* TextureSizeLabels[] = {
 GLuint vertexShaderHandle;
 GLuint errorShaderHandle;
 
+// unscalled and not paused time
+double realTime;
+double realDeltaTime;
+
+double timeScale = 1;
+
 double time;
 double deltaTime;
 
 int frame;
+
+bool timePaused;
 
 template <typename T>
 T Clamp(T v, T a, T b) { return (v < a) ? a : ((v > b) : b : v); }
@@ -947,6 +955,32 @@ void DrawWindow(WindowData* windowData) {
         ShellExecute(0, "open", windowData->shader.fileData.path.string, 0, 0 , SW_SHOW);
     }
 
+    ImGui::Separator();
+
+    ImGui::Text("Time: %.2f", time);
+    ImGui::Text("Frame: %d", frame);
+    ImGui::Text("Scale: %.2f", timeScale);
+
+    if(ImGui::Button(timePaused ? "Resume" : "Pause")) {
+        timePaused = !timePaused;
+    }
+
+    ImGui::SameLine();
+    if(ImGui::Button("Reset")) {
+        time = 0;
+        deltaTime = 0;
+        frame = 0;
+    }
+
+    if(ImGui::Button("<")) {
+        timeScale /= 2;
+    }
+
+    ImGui::SameLine();
+    if(ImGui::Button(">")) {
+        timeScale *= 2;
+    }
+
     ImGui::EndChild();
 
     ImGui::SameLine();
@@ -1143,9 +1177,15 @@ int main()
         // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
         glfwPollEvents();
 
-        deltaTime = glfwGetTime() - time;
-        time = glfwGetTime();
-        frame++;
+        realDeltaTime = glfwGetTime() - realTime;
+        realTime = glfwGetTime();
+
+        if(timePaused == false) {
+            // @TODO: Should I Be worried about numerical error?
+            deltaTime = realDeltaTime * timeScale;
+            time += deltaTime;
+            frame++;
+        }
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
