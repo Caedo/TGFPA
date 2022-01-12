@@ -10,6 +10,8 @@ LIB(noise3Dgrad)
 LIB(noise4D)
 LIB(psrdnoise2D)
 
+uniform sampler2D uniform_texture;
+
 uniform int    uniform_int;
 uniform uint   uniform_uint;
 uniform bool   uniform_bool;

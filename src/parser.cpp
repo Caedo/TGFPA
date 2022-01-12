@@ -346,8 +346,10 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
                 Token typeToken = RequireToken(&tokenizer, Token_Identifier);
                 Token nameToken = RequireToken(&tokenizer, Token_Identifier);
 
-                if(tokenizer.parsing == false)
+                if(tokenizer.parsing == false) {
+                    *count = 0;
                     return NULL;
+                }
 
                 ShaderUniformData* uniform = (ShaderUniformData*) PushArena(arena, sizeof(ShaderUniformData));
 
@@ -368,6 +370,7 @@ ShaderUniformData* GetShaderUniforms(char* shaderSource, MemoryArena* arena, int
                     RequireToken(&tokenizer, Token_CloseSquareBracket);
 
                     if(tokenizer.parsing == false) {
+                        *count = 0;
                         return NULL;
                     }
 

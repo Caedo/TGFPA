@@ -301,6 +301,10 @@ void CreateShader(Shader* shader) {
     shader->uniforms = GetShaderUniforms(shader->source.string, &shader->shaderMemory, &shader->uniformsCount);
     shader->libs     = GetShaderLibs(shader->source.string, &shader->shaderMemory, &shader->libsCount);
 
+    if(shader->uniforms == NULL || shader->libs == NULL) {
+        return;
+    }
+
     if(CompileShader(shader) == false) {
         shader->isValid = false;
         return;
@@ -979,7 +983,9 @@ void DrawWindow(WindowData* windowData) {
         }
 
         if(ImGui::BeginTabItem("Errors")) {
-            ImGui::TextWrapped(windowData->shader.errors.string);
+            if(windowData->shader.errors.string) {
+                ImGui::TextWrapped(windowData->shader.errors.string);
+            }
             ImGui::EndTabItem();
         }
 
