@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <ctype.h>
+#include <math.h>
 
 #include "glad.c"
 
@@ -189,6 +190,8 @@ double deltaTime;
 int frame;
 
 bool timePaused;
+
+bool use9Slice;
 
 template <typename T>
 T Clamp(T v, T a, T b) { return (v < a) ? a : ((v > b) : b : v); }
@@ -665,6 +668,12 @@ void DrawMenuBar() {
             ImGui::EndMenu();
         }
 
+        if(ImGui::BeginMenu("View")) {
+            ImGui::MenuItem("9-Slice", NULL, &use9Slice);
+
+            ImGui::EndMenu();
+        }
+
         if(ImGui::BeginMenu("Help")) {
             if(ImGui::MenuItem("Show/Hide ImGui help")) {
                 show_demo_window = !show_demo_window;
@@ -946,10 +955,42 @@ void DrawWindow(WindowData* windowData) {
     float uvX = uvY * imageWidth / imageHeight;
 
     ImVec2 p = ImGui::GetCursorScreenPos();
-    ImGui::Image((void*)(intptr_t)checkerTexture, ImVec2(imageWidth, imageHeight), ImVec2(0, 0), ImVec2(uvX , uvY));
 
-    ImGui::SetCursorScreenPos(p);
-    ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, ImVec2(imageWidth, imageHeight));
+    if(use9Slice) {
+        ImVec2 size = { ceilf(imageWidth / 3), ceilf(imageHeight / 3) };
+
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
+        ImGui::Image((void*)(intptr_t)checkerTexture, size * 3, ImVec2(0, 0), ImVec2(uvX , uvY));
+        ImGui::SetCursorScreenPos(p);
+
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, size);
+        ImGui::SameLine();
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, size);
+        ImGui::SameLine();
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, size);
+
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, size);
+        ImGui::SameLine();
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, size);
+        ImGui::SameLine();
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, size);
+        
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, size);
+        ImGui::SameLine();
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, size);
+        ImGui::SameLine();
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, size);
+
+        ImGui::PopStyleVar();
+        ImGui::Spacing();
+    }
+    else {
+        ImGui::Image((void*)(intptr_t)checkerTexture, ImVec2(imageWidth, imageHeight), ImVec2(0, 0), ImVec2(uvX , uvY));
+        ImGui::SetCursorScreenPos(p);
+
+        ImGui::Image((void*)(intptr_t)windowData->framebuffer.colorTexture, ImVec2(imageWidth, imageHeight));
+    }
 
     if(ImGui::Button("Open shader file")) {
         ShellExecute(0, "open", windowData->shader.fileData.path.string, 0, 0 , SW_SHOW);
